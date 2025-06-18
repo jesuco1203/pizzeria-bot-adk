@@ -93,32 +93,35 @@ logger.info(f"Configuración de max_output_tokens aplicada a los agentes.")
 
 
 async def get_or_create_adk_session(user_id_telegram: int, chat_id_telegram: int):
-    """Obtiene o crea una sesión ADK usando IDs de Telegram."""
+    """Obtiene o crea una sesión ADK, asegurando que el estado inicial sea correcto."""
     user_id_adk = str(user_id_telegram) 
-    session_id_adk = str(chat_id_telegram) # Usamos chat_id como session_id para simplicidad
+    session_id_adk = str(chat_id_telegram)
 
     current_session = await session_service_adk.get_session(
         app_name=APP_NAME_ADK, user_id=user_id_adk, session_id=session_id_adk
     )
     if current_session is None:
+        logger.info(f"No se encontró sesión para user {user_id_adk}. Creando una nueva...")
+        
+        # <<< ESTE ES EL BLOQUE CORREGIDO Y LA SOLUCIÓN CLAVE >>>
         initial_state = {
-            '_explicit_user_id_for_callback': user_id_adk, # Para tu callback de CMA
-            '_session_session_id': session_id_adk,
-            'current_main_goal': 'IDLE', # Estado inicial para RootAgent
-            'processing_order_sub_phase': None # Se establecerá por RootAgent
+            '_session_user_id': user_id_adk,                # AÑADIDO: Guarda el ID del usuario.
+            'processing_order_sub_phase': 'A_GESTION_CLIENTE', # AÑADIDO: Establece la fase inicial.
+            'current_main_goal': 'IDLE'                     # Establece un objetivo inicial.
         }
+        
         current_session = await session_service_adk.create_session(
             app_name=APP_NAME_ADK, user_id=user_id_adk, session_id=session_id_adk, state=initial_state
         )
-        # LOG AJUSTADO: Condensar la información del estado.
-        logger.info(f"Nueva sesión ADK creada para user {user_id_adk} (chat {chat_id_telegram}). ID: {session_id_adk}. Estado inicial: {current_session.state.get('current_main_goal', 'N/A')}/{current_session.state.get('processing_order_sub_phase', 'N/A')}")
+        logger.info(f"Nueva sesión ADK creada para user {user_id_adk}. Estado inicial: {initial_state}")
+    
     else:
-        if current_session.state is None: # Por si acaso
+        # Nos aseguramos que el user_id siempre esté, incluso en sesiones existentes.
+        if current_session.state is None:
             current_session.state = {}
-        current_session.state['_explicit_user_id_for_callback'] = user_id_adk # Asegurar que siempre esté
-        current_session.state['_session_session_id'] = session_id_adk
-        # LOG AJUSTADO: Condensar la información del estado.
-        logger.info(f"Sesión ADK existente recuperada para user {user_id_adk} (chat {chat_id_telegram}). ID: {session_id_adk}. Estado: {current_session.state.get('current_main_goal', 'N/A')}/{current_session.state.get('processing_order_sub_phase', 'N/A')}")
+        current_session.state['_session_user_id'] = user_id_adk
+        logger.info(f"Sesión ADK existente recuperada para user {user_id_adk}. Estado actual: {current_session.state}")
+        
     return user_id_adk, session_id_adk
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
