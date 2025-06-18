@@ -54,14 +54,18 @@ if not GOOGLE_API_KEY or GOOGLE_API_KEY == "TU_API_KEY_DE_GEMINI_AQUI": # Placeh
 
 # Define un timeout más largo para las solicitudes HTTPX (ej. 20 segundos)
 # El timeout se pasa al cliente HTTPX subyacente, no directamente a Request.
-DEFAULT_HTTPX_TIMEOUT = Timeout(20.0, connect=5.0, read=20.0, write=5.0)
 MAX_TELEGRAM_RETRIES = 5  # Máximo de reintentos a nivel de Telegram para un solo mensaje del usuario
 INITIAL_BACKOFF_SECONDS = 2 # Tiempo de espera inicial para el backoff exponencial (se duplica en cada reintento)
 # Construye la aplicación, pasando el timeout al cliente HTTPX
-application = Application.builder().token(TELEGRAM_BOT_TOKEN).http_version("1.1").build()
-application.http_client = httpx.AsyncClient(timeout=DEFAULT_HTTPX_TIMEOUT) # Configura el timeout a nivel del cliente HTTPX
-
-
+application = (
+    Application.builder()
+    .token(TELEGRAM_BOT_TOKEN)
+    .connect_timeout(30.0)  # Timeout de conexión en segundos
+    .read_timeout(30.0)     # Timeout de lectura en segundos (importante para long polling)
+    .write_timeout(30.0)    # Timeout de escritura en segundos
+    .http_version("1.1")
+    .build()
+)
 # Nombre del archivo PDF del menú (debe estar en la misma carpeta que este script)
 MENU_PDF_FILENAME = "menu_pizzeria.pdf"
 
