@@ -319,7 +319,7 @@ def main() -> None:
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     logger.info("🚀 Iniciando bot de Telegram con long polling...")
-    application.run_polling()
-
+    application.run_polling(drop_pending_updates=True)
+    
 if __name__ == '__main__':
     main()
