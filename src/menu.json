@@ -1,0 +1,314 @@
+{
+  "PIZ001-G": {
+    "Nombre_Plato": "Pizza de Jamón - Grande",
+    "Descripcion_Plato": "Una de las más sencillas y preferidas de todos jamón y queso mozzarella.",
+    "Categoria": "Pizzas",
+    "Precio": 24,
+    "Ingredientes": "Jamón, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ001-F": {
+    "Nombre_Plato": "Pizza de Jamón - Familiar",
+    "Descripcion_Plato": "Una de las más sencillas y preferidas de todos jamón y queso mozzarella.",
+    "Categoria": "Pizzas",
+    "Precio": 32,
+    "Ingredientes": "Jamón, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ002-G": {
+    "Nombre_Plato": "Pizza Americana - Grande",
+    "Descripcion_Plato": "Nuestra combinación del mejor jamón queso mozzarella aceitunas y pimentón.",
+    "Categoria": "Pizzas",
+    "Precio": 25,
+    "Ingredientes": "Jamón, Queso Mozzarella, Aceitunas, Pimentón",
+    "Disponible": "Sí"
+  },
+  "PIZ002-F": {
+    "Nombre_Plato": "Pizza Americana - Familiar",
+    "Descripcion_Plato": "Nuestra combinación del mejor jamón queso mozzarella aceitunas y pimentón.",
+    "Categoria": "Pizzas",
+    "Precio": 33,
+    "Ingredientes": "Jamón, Queso Mozzarella, Aceitunas, Pimentón",
+    "Disponible": "Sí"
+  },
+  "PIZ003-G": {
+    "Nombre_Plato": "Pizza Hawaiana - Grande",
+    "Descripcion_Plato": "Pizza paradisíaca hecha a mano con salsa de tomate natural queso 100% mozzarella el mejor Jamón y jugosa piña golden en almíbar, sencillamente espectacular.",
+    "Categoria": "Pizzas",
+    "Precio": 26,
+    "Ingredientes": "Salsa de Tomate, Queso Mozzarella, Jamón, Piña Golden",
+    "Disponible": "Sí"
+  },
+  "PIZ003-F": {
+    "Nombre_Plato": "Pizza Hawaiana - Familiar",
+    "Descripcion_Plato": "Pizza paradisíaca hecha a mano con salsa de tomate natural queso 100% mozzarella el mejor Jamón y jugosa piña golden en almíbar, sencillamente espectacular.",
+    "Categoria": "Pizzas",
+    "Precio": 34,
+    "Ingredientes": "Salsa de Tomate, Queso Mozzarella, Jamón, Piña Golden",
+    "Disponible": "Sí"
+  },
+  "PIZ004-G": {
+    "Nombre_Plato": "Pizza Vegetariana - Grande",
+    "Descripcion_Plato": "Deliciosa pizza con tus vegetales favoritos cargada con Pimentones, cebolla roja, champiñones, aceitunas, tomates y 100% queso mozzarella.",
+    "Categoria": "Pizzas",
+    "Precio": 25,
+    "Ingredientes": "Pimentones, Cebolla Roja, Champiñones, Aceitunas, Tomates, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ004-F": {
+    "Nombre_Plato": "Pizza Vegetariana - Familiar",
+    "Descripcion_Plato": "Deliciosa pizza con tus vegetales favoritos cargada con Pimentones, cebolla roja, champiñones, aceitunas, tomates y 100% queso mozzarella.",
+    "Categoria": "Pizzas",
+    "Precio": 33,
+    "Ingredientes": "Pimentones, Cebolla Roja, Champiñones, Aceitunas, Tomates, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ005-G": {
+    "Nombre_Plato": "Pizza de Pepperoni - Grande",
+    "Descripcion_Plato": "Pizza clásica de Pepperoni, con irresistible queso 100% mozzarella.",
+    "Categoria": "Pizzas",
+    "Precio": 26,
+    "Ingredientes": "Pepperoni, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ005-F": {
+    "Nombre_Plato": "Pizza de Pepperoni - Familiar",
+    "Descripcion_Plato": "Pizza clásica de Pepperoni, con irresistible queso 100% mozzarella.",
+    "Categoria": "Pizzas",
+    "Precio": 34,
+    "Ingredientes": "Pepperoni, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ006-G": {
+    "Nombre_Plato": "Pizza de Salame - Grande",
+    "Descripcion_Plato": "Pizza clásica de salame, con queso 100% mozarella.",
+    "Categoria": "Pizzas",
+    "Precio": 27,
+    "Ingredientes": "Salame, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ006-F": {
+    "Nombre_Plato": "Pizza de Salame - Familiar",
+    "Descripcion_Plato": "Pizza clásica de salame, con queso 100% mozarella.",
+    "Categoria": "Pizzas",
+    "Precio": 35,
+    "Ingredientes": "Salame, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ007-G": {
+    "Nombre_Plato": "Pizza Tropical - Grande",
+    "Descripcion_Plato": "Como nuestra hawaiana con el mejor Jamón, queso 100% mozzarella, jugosa piña golden en almíbar y trozos de jugoso durazno.",
+    "Categoria": "Pizzas",
+    "Precio": 28,
+    "Ingredientes": "Jamón, Queso Mozzarella, Piña Golden, Durazno",
+    "Disponible": "Sí"
+  },
+  "PIZ007-F": {
+    "Nombre_Plato": "Pizza Tropical - Familiar",
+    "Descripcion_Plato": "Como nuestra hawaiana con el mejor Jamón, queso 100% mozzarella, jugosa piña golden en almíbar y trozos de jugoso durazno.",
+    "Categoria": "Pizzas",
+    "Precio": 36,
+    "Ingredientes": "Jamón, Queso Mozzarella, Piña Golden, Durazno",
+    "Disponible": "Sí"
+  },
+  "PIZ008-G": {
+    "Nombre_Plato": "Pizza de Pollo Hawaiano - Grande",
+    "Descripcion_Plato": "Deliciosa pizza con trozos de pollo aderezado el mejor Jamón y jugosa piña golden en almíbar.",
+    "Categoria": "Pizzas",
+    "Precio": 28,
+    "Ingredientes": "Pollo Aderezado, Jamón, Piña Golden",
+    "Disponible": "Sí"
+  },
+  "PIZ008-F": {
+    "Nombre_Plato": "Pizza de Pollo Hawaiano - Familiar",
+    "Descripcion_Plato": "Deliciosa pizza con trozos de pollo aderezado el mejor Jamón y jugosa piña golden en almíbar.",
+    "Categoria": "Pizzas",
+    "Precio": 36,
+    "Ingredientes": "Pollo Aderezado, Jamón, Piña Golden",
+    "Disponible": "Sí"
+  },
+  "PIZ009-G": {
+    "Nombre_Plato": "Pizza de Chorizo y Champiñón - Grande",
+    "Descripcion_Plato": "Sencilla pizza del mejor Chorizo en rodajas champiñones y queso 100% mozzarella.",
+    "Categoria": "Pizzas",
+    "Precio": 30,
+    "Ingredientes": "Chorizo, Champiñones, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ009-F": {
+    "Nombre_Plato": "Pizza de Chorizo y Champiñón - Familiar",
+    "Descripcion_Plato": "Sencilla pizza del mejor Chorizo en rodajas champiñones y queso 100% mozzarella.",
+    "Categoria": "Pizzas",
+    "Precio": 38,
+    "Ingredientes": "Chorizo, Champiñones, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ010-G": {
+    "Nombre_Plato": "Pizza de Pollo Hawaiano Barbecue - Grande",
+    "Descripcion_Plato": "Deliciosa pizza con trozos de pollo aderezado el mejor jamón, cabanozzi, exquisita piña golden en almíbar y salsa barbecue.",
+    "Categoria": "Pizzas",
+    "Precio": 31,
+    "Ingredientes": "Pollo Aderezado, Jamón, Cabanozzi, Piña Golden, Salsa Barbecue",
+    "Disponible": "Sí"
+  },
+  "PIZ010-F": {
+    "Nombre_Plato": "Pizza de Pollo Hawaiano Barbecue - Familiar",
+    "Descripcion_Plato": "Deliciosa pizza con trozos de pollo aderezado el mejor jamón, cabanozzi, exquisita piña golden en almíbar y salsa barbecue.",
+    "Categoria": "Pizzas",
+    "Precio": 39,
+    "Ingredientes": "Pollo Aderezado, Jamón, Cabanozzi, Piña Golden, Salsa Barbecue",
+    "Disponible": "Sí"
+  },
+  "PIZ011-LG": {
+    "Nombre_Plato": "Pizza Suprema Lomo - Grande",
+    "Descripcion_Plato": "Exquisita pizza con trozos de lomo fino el mejor jamón, cabanozzi, cebolla roja, pimentones y champiñón.",
+    "Categoria": "Pizzas",
+    "Precio": 32,
+    "Ingredientes": "Lomo Fino, Jamón, Cabanozzi, Cebolla Roja, Pimentones, Champiñón",
+    "Disponible": "Sí"
+  },
+  "PIZ011-LF": {
+    "Nombre_Plato": "Pizza Suprema Lomo - Familiar",
+    "Descripcion_Plato": "Exquisita pizza con trozos de lomo fino el mejor jamón, cabanozzi, cebolla roja, pimentones y champiñón.",
+    "Categoria": "Pizzas",
+    "Precio": 40,
+    "Ingredientes": "Lomo Fino, Jamón, Cabanozzi, Cebolla Roja, Pimentones, Champiñón",
+    "Disponible": "Sí"
+  },
+  "PIZ011-PG": {
+    "Nombre_Plato": "Pizza Suprema Pollo - Grande",
+    "Descripcion_Plato": "Exquisita pizza con trozos de pollo aderezado el mejor jamón, cabanozzi, cebolla roja, pimentones y champiñón.",
+    "Categoria": "Pizzas",
+    "Precio": 32,
+    "Ingredientes": "Pollo Aderezado, Jamón, Cabanozzi, Cebolla Roja, Pimentones, Champiñón",
+    "Disponible": "Sí"
+  },
+  "PIZ011-PF": {
+    "Nombre_Plato": "Pizza Suprema Pollo - Familiar",
+    "Descripcion_Plato": "Exquisita pizza con trozos de pollo aderezado el mejor jamón, cabanozzi, cebolla roja, pimentones y champiñón.",
+    "Categoria": "Pizzas",
+    "Precio": 40,
+    "Ingredientes": "Pollo Aderezado, Jamón, Cabanozzi, Cebolla Roja, Pimentones, Champiñón",
+    "Disponible": "Sí"
+  },
+  "PIZ012-G": {
+    "Nombre_Plato": "Pizza La Diabla - Grande",
+    "Descripcion_Plato": "Para los amantes del picante deliciosa pizza con salsa de tomate natural ligeramente picante, jamón, cabanozzi, pimentón y jugoso durazno en almíbar.",
+    "Categoria": "Pizzas",
+    "Precio": 31,
+    "Ingredientes": "Salsa de Tomate Picante, Jamón, Cabanozzi, Pimentón, Durazno",
+    "Disponible": "Sí"
+  },
+  "PIZ012-F": {
+    "Nombre_Plato": "Pizza La Diabla - Familiar",
+    "Descripcion_Plato": "Para los amantes del picante deliciosa pizza con salsa de tomate natural ligeramente picante, jamón, cabanozzi, pimentón y jugoso durazno en almíbar.",
+    "Categoria": "Pizzas",
+    "Precio": 39,
+    "Ingredientes": "Salsa de Tomate Picante, Jamón, Cabanozzi, Pimentón, Durazno",
+    "Disponible": "Sí"
+  },
+  "PIZ013-G": {
+    "Nombre_Plato": "Pizza Meats Hawaian Barbecue - Grande",
+    "Descripcion_Plato": "Exquisita combinación de trozos de pollo y lomo fino aderezado chorizo, cabanozzi, jamón, jugosa piña golden en almíbar y salsa barbecue.",
+    "Categoria": "Pizzas",
+    "Precio": 37,
+    "Ingredientes": "Pollo, Lomo Fino, Chorizo, Cabanozzi, Jamón, Piña Golden, Salsa Barbecue",
+    "Disponible": "Sí"
+  },
+  "PIZ013-F": {
+    "Nombre_Plato": "Pizza Meats Hawaian Barbecue - Familiar",
+    "Descripcion_Plato": "Exquisita combinación de trozos de pollo y lomo fino aderezado chorizo, cabanozzi, jamón, jugosa piña golden en almíbar y salsa barbecue.",
+    "Categoria": "Pizzas",
+    "Precio": 45,
+    "Ingredientes": "Pollo, Lomo Fino, Chorizo, Cabanozzi, Jamón, Piña Golden, Salsa Barbecue",
+    "Disponible": "Sí"
+  },
+  "PIZ014-G": {
+    "Nombre_Plato": "Pizza Super Suprema - Grande",
+    "Descripcion_Plato": "Perfecta mezcla de pepperoni trozos de lomo fino y pollo aderezado, Jamón, chorizo, champiñones, pimentón, cebolla roja, Aceitunas y queso 100% mozarella.",
+    "Categoria": "Pizzas",
+    "Precio": 37,
+    "Ingredientes": "Pepperoni, Lomo Fino, Pollo Aderezado, Jamón, Chorizo, Champiñones, Pimentón, Cebolla Roja, Aceitunas, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ014-F": {
+    "Nombre_Plato": "Pizza Super Suprema - Familiar",
+    "Descripcion_Plato": "Perfecta mezcla de pepperoni trozos de lomo fino y pollo aderezado, Jamón, chorizo, champiñones, pimentón, cebolla roja, Aceitunas y queso 100% mozarella.",
+    "Categoria": "Pizzas",
+    "Precio": 45,
+    "Ingredientes": "Pepperoni, Lomo Fino, Pollo Aderezado, Jamón, Chorizo, Champiñones, Pimentón, Cebolla Roja, Aceitunas, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ015-G": {
+    "Nombre_Plato": "Pizza Meat Lovers (Carnivora) - Grande",
+    "Descripcion_Plato": "Delicioso festín de carnes con trozos de lomo fino trozos de pollo, chorizo, cabanozzi, tocino, Jamón y queso 100% mozarella.",
+    "Categoria": "Pizzas",
+    "Precio": 36,
+    "Ingredientes": "Lomo Fino, Pollo, Chorizo, Cabanozzi, Tocino, Jamón, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "PIZ015-F": {
+    "Nombre_Plato": "Pizza Meat Lovers (Carnivora) - Familiar",
+    "Descripcion_Plato": "Delicioso festín de carnes con trozos de lomo fino trozos de pollo, chorizo, cabanozzi, tocino, Jamón y queso 100% mozarella.",
+    "Categoria": "Pizzas",
+    "Precio": 44,
+    "Ingredientes": "Lomo Fino, Pollo, Chorizo, Cabanozzi, Tocino, Jamón, Queso Mozzarella",
+    "Disponible": "Sí"
+  },
+  "LAS001": {
+    "Nombre_Plato": "Lasagna Bolognesa Personal (500GR.)",
+    "Descripcion_Plato": "Deliciosa combinación de salsa boloñesa elaborada con puro tomate fresco carne de res y salsa bechamel a base de leche y queso 100% mozzarella.",
+    "Categoria": "Lasagnas (lasaña)",
+    "Precio": 21,
+    "Disponible": "Sí"
+  },
+  "LAS002": {
+    "Nombre_Plato": "Lasagna Alfredo Personal (500GR.)",
+    "Descripcion_Plato": "Deliciosa salsa bechamel a base de leche el mejor jamón y queso 100% mozzarella.",
+    "Categoria": "Lasagnas (lasaña)",
+    "Precio": 21,
+    "Disponible": "Sí"
+  },
+  "COM001": {
+    "Nombre_Plato": "Salsa Extra",
+    "Descripcion_Plato": "Para pizza familiar o grande",
+    "Categoria": "Complementos",
+    "Precio": 1.5,
+    "Disponible": "Sí"
+  },
+  "COM002": {
+    "Nombre_Plato": "Maíz Extra para Pizza Grande",
+    "Descripcion_Plato": "Aplica solo para pizza grande",
+    "Categoria": "Complementos",
+    "Precio": 2,
+    "Disponible": "Sí"
+  },
+  "COM003": {
+    "Nombre_Plato": "Queso Extra para Pizza Familiar",
+    "Descripcion_Plato": "Aplica solo para pizza familiar",
+    "Categoria": "Complementos",
+    "Precio": 3,
+    "Disponible": "Sí"
+  },
+  "COM004": {
+    "Nombre_Plato": "Queso Extra para Pizza Grande",
+    "Descripcion_Plato": "Aplica solo para pizza grande",
+    "Categoria": "Complementos",
+    "Precio": 4,
+    "Disponible": "Sí"
+  },
+  "BEB001": {
+    "Nombre_Plato": "Gaseosa Pepsi 500 ML",
+    "Descripcion_Plato": "Bebida gaseosa personal",
+    "Categoria": "Bebidas",
+    "Precio": 2.5,
+    "Disponible": "Sí"
+  },
+  "BEB002": {
+    "Nombre_Plato": "Gaseosa Pepsi 1.5 LT",
+    "Descripcion_Plato": "Bebida gaseosa familiar",
+    "Categoria": "Bebidas",
+    "Precio": 5,
+    "Disponible": "Sí"
+  }
+}
