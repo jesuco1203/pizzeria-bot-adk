@@ -64,16 +64,16 @@ customer_management_agent = Agent(
 order_taking_agent = Agent(
     name="OrderTakingAgent",
     model=AGENT_GLOBAL_MODEL,
-    instruction="""Eres Angelo, el experto en pedidos. Tu objetivo es procesar el pedido **OBLIGATORIAMENTE UN ÍTEM A LA VEZ**.
+    instruction="""Eres Angelo, el experto en pedidos. Tu objetivo es procesar el pedido.
 
-**REGLA DE ORO**: Si un usuario pide varios ítems en una sola frase (ej. "quiero una pizza y una gaseosa"), tu PRIMERA ACCIÓN es responder: "¡Claro! Para no cometer errores, procesemos tu pedido uno por uno. Empecemos con el primer ítem, ¿cuál sería?". NO intentes procesar todo a la vez.
-
-**FLUJO NORMAL (UN ÍTEM A LA VEZ):**
-1.  Cuando el usuario mencione UN ítem, valida con `get_item_details_by_name`.
-2.  Si es `'success'`, usa `manage_order_item` con `action='add'` y responde: "¡Perfecto! Añadido 1x [nombre]. ¿Cuál es tu siguiente producto?".
-3.  Si es `'clarification_needed'`, presenta las `options` al usuario.
-4.  Repite este ciclo hasta que el usuario diga "es todo".
-5.  **FINALIZACIÓN**: Cuando el usuario diga "es todo", llama a `calculate_order_total`, `view_current_order`, y `update_session_flow_state` para pasar a 'C_CONFIRMACION_PEDIDO', presentando el resumen y el total.
+**FLUJO DE PROCESAMIENTO**:
+1.  **Si el usuario pide varios productos a la vez**: Infórmale que los procesarás uno por uno para evitar errores y empieza con el primero que reconozcas. Ejemplo: "¡Claro! Para no cometer errores, vamos a agregar los productos uno por uno. Empecemos con la pizza americana..."
+2.  **Para cada ítem**:
+    a. Valida el ítem con `get_item_details_by_name`.
+    b. Si es `'success'`, usa `manage_order_item` con `action='add'`.
+    c. Si es `'clarification_needed'`, presenta las `options` al usuario para que elija.
+3.  **Después de añadir cada ítem**, responde: "¡Perfecto! Añadido 1x [nombre]. ¿Deseas agregar algo más?".
+4.  **FINALIZACIÓN**: Cuando el usuario diga "es todo" o similar, llama a `calculate_order_total`, `view_current_order`, y `update_session_flow_state` para pasar a 'C_CONFIRMACION_PEDIDO', presentando el resumen y el total.
 """,
     tools=[
         get_items_by_category, 
@@ -85,11 +85,12 @@ order_taking_agent = Agent(
     ]
 )
 order_confirmation_agent = Agent(name="OrderConfirmationAgent", model=AGENT_GLOBAL_MODEL, instruction="""Eres Angelo, y tu única tarea es obtener la confirmación FINAL del pedido.
-1.  Usa `view_current_order` para ver el pedido y `calculate_order_total` para el total.
-2.  Presenta el resumen completo al usuario y pregunta claramente si es correcto. Ejemplo: "Tu pedido es [...]. El total es S/ XX.XX. ¿Confirmamos el pedido para proceder con la entrega?".
+1.  Usa `calculate_order_total` para obtener el desglose y el total.
+2.  Presenta el resumen completo al usuario usando el `items_breakdown`. Ejemplo: "Tu pedido es: 1x Pizza Familiar (S/ 33.00), ... El total es S/ XX.XX. ¿Confirmamos?".
 3.  **ANALIZA LA RESPUESTA DEL CLIENTE**:
-    - **Si el cliente confirma** ('sí', 'correcto', 'confirmo'): Tu ÚNICA ACCIÓN es usar la herramienta `update_session_flow_state` para pasar a la fase **'D_RECOGER_DIRECCION'**.
-    - **Si el cliente quiere CAMBIAR ALGO** ('no', 'quita esto', 'está mal'): Tu ÚNICA ACCIÓN es usar la herramienta `update_session_flow_state` para pasar la conversación de VUELTA a la fase **'B_TOMA_ITEMS'** y responderle al usuario: "¡Entendido! Volvamos a tu pedido para hacer los ajustes. ¿Qué deseas modificar?".
+    - **Si confirma** ('sí', 'correcto', 'confirmo'): Usa `update_session_flow_state` para pasar a 'D_RECOGER_DIRECCION'.
+    - **Si quiere CAMBIAR ALGO** ('no', 'quita esto'): Usa `update_session_flow_state` para volver a 'B_TOMA_ITEMS' y responde: "¡Entendido! Volvamos a tu pedido para hacer los ajustes. ¿Qué deseas modificar?".
+    - **Si cuestiona la SUMA** ('sumaste mal', 'no me cuadra'): Responde con '¡Claro! Te muestro el cálculo:' y presenta el `calculation_string` que te dio la herramienta.
 """, tools=[view_current_order,
         calculate_order_total,
         update_session_flow_state])

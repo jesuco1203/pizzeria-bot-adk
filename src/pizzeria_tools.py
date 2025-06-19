@@ -287,8 +287,7 @@ async def view_current_order(tool_context: Any) -> Dict[str, Any]:
 
 async def calculate_order_total(tool_context: Any) -> Dict[str, Any]:
     """
-    Calcula el subtotal del pedido actual. Es DEFENSIVO: verifica el tipo de 
-    cada ítem en el carrito para evitar errores si el estado se corrompe.
+    Calcula el subtotal del pedido, siendo defensivo y devolviendo un desglose completo.
     """
     state = get_state_from_context(tool_context)
     order_items = state.get('_current_order_items', [])
@@ -296,23 +295,23 @@ async def calculate_order_total(tool_context: Any) -> Dict[str, Any]:
     menu = get_menu()
     
     subtotal = 0.0
-    items_with_prices = []
+    items_breakdown = []
+    calculation_string_parts = []
 
     if not menu:
         logger.error("[Tool] No se pudo calcular el total: la caché del menú está vacía.")
-        return {"status": "error_no_menu", "subtotal": 0.0, "detail_string": ""}
+        return {"status": "error_no_menu", "subtotal": 0.0, "items_breakdown": [], "calculation_string": "Error"}
 
     for item_in_order in order_items:
-        # --- ESTA LÍNEA ES LA SOLUCIÓN CRÍTICA AL CRASH ---
         if not isinstance(item_in_order, dict):
-            logger.warning(f"[Tool] Ítem inválido (no es un diccionario) en el carrito, omitido: {item_in_order}")
+            logger.warning(f"[Tool] Ítem inválido en carrito, omitido: {item_in_order}")
             continue 
-        # --- FIN DE LA LÍNEA CRÍTICA ---
-
+        
         item_name = item_in_order.get('name')
         if not item_name:
             continue
 
+        # Usamos get_menu() que ahora devuelve una lista de diccionarios
         item_details = next((menu_item for menu_item in menu if menu_item.get('Nombre_Plato') == item_name), None)
         
         if item_details:
@@ -321,14 +320,27 @@ async def calculate_order_total(tool_context: Any) -> Dict[str, Any]:
                 cantidad = int(item_in_order.get('quantity', 1))
                 item_subtotal = precio * cantidad
                 subtotal += item_subtotal
-                items_with_prices.append(f"{cantidad}x {item_name} (S/ {item_subtotal:.2f})")
+                
+                # Añadimos al desglose
+                items_breakdown.append({"name": item_name, "quantity": cantidad, "price": f"S/ {precio:.2f}", "subtotal": f"S/ {item_subtotal:.2f}"})
+                calculation_string_parts.append(f"{item_subtotal:.2f}")
+
             except (ValueError, TypeError):
                 logger.warning(f"No se pudo procesar el precio/cantidad para el ítem: {item_name}")
 
     final_total = round(subtotal, 2)
     state["_order_subtotal"] = final_total
-    logger.info(f"[Tool] Subtotal calculado desde la caché: {final_total}")
-    return {"status": "success", "subtotal": final_total, "detail_string": ", ".join(items_with_prices)}
+    
+    calculation_string = " + ".join(calculation_string_parts) + f" = S/ {final_total:.2f}"
+    
+    logger.info(f"[Tool] Subtotal calculado: {final_total}. Desglose: {items_breakdown}")
+    
+    return {
+        "status": "success", 
+        "subtotal": final_total, 
+        "items_breakdown": items_breakdown,
+        "calculation_string": calculation_string
+    }
 
 async def update_session_flow_state(tool_context: Any, processing_order_sub_phase: str) -> Dict[str, Any]:
     """Cambia la fase de la conversación."""

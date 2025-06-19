@@ -1547,3 +1547,64 @@ Plan: Integrar un servicio de Speech-to-Text (como la API de Google) como un pre
 El proyecto PizzeríaBot es un éxito rotundo. Hemos superado todos los obstáculos técnicos y de estabilidad, y hemos construido una base de software sólida, profesional y escalable. La arquitectura actual es un ejemplo excelente de cómo diseñar sistemas de agentes fiables.
 
 Tras realizar los 2 refinamientos finales (dirección y alias), podremos dar por finalizada la versión 1.0 del núcleo del bot y pasar con total confianza a la fase de implementación de las nuevas y emocionantes funcionalidades de la hoja de ruta.
+
+Hoja de Ruta y Estado del Proyecto: PizzeríaBot v1.0 - ¡Listo para Producción! 🚀
+Fecha: 18 de Junio, 2025
+
+1. Resumen Ejecutivo y Estado Actual
+El proyecto PizzeríaBot ha culminado con éxito su fase de desarrollo y estabilización del núcleo. Hemos evolucionado desde un prototipo inicial a un sistema multi-agente robusto, funcional y desplegado en un entorno de producción en la nube (Render).
+
+La arquitectura final se basa en un orquestador central determinista (RootOrchestratorAgent) que gestiona un equipo de agentes especialistas, cada uno con responsabilidades claras. La implementación de una caché en memoria (menu.json) ha optimizado drásticamente el rendimiento, y la lógica de los agentes ha sido refinada para manejar flujos de conversación complejos, incluyendo la modificación de pedidos antes de la confirmación final.
+
+El bot es estable, no presenta errores críticos y está listo para la siguiente fase: la implementación de funcionalidades avanzadas para enriquecer la experiencia del cliente y la operación del negocio.
+
+2. Hitos de Desarrollo Clave (Logros Alcanzados)
+Gracias a nuestro riguroso proceso de depuración iterativa, hemos alcanzado los siguientes hitos fundamentales:
+
+✅ Estabilidad en Producción: El bot está desplegado con éxito en Render como un Background Worker. Hemos solucionado todos los problemas de construcción (compilación de numpy), configuración de entorno (PYTHON_VERSION) y de ejecución (telegram.error.Conflict), logrando un servicio estable y persistente.
+
+✅ Cero Errores Críticos: Se ha erradicado por completo el AttributeError que detenía la aplicación. Las herramientas ahora son "a prueba de balas", especialmente calculate_order_total, que maneja datos del carrito de forma segura.
+
+✅ Lógica de Modificación de Pedidos: Se ha implementado y verificado con éxito el flujo de modificación de pedidos. El OrderConfirmationAgent detecta la intención de cambio y delega correctamente el control de vuelta al OrderTakingAgent, quien ahora puede procesar la eliminación de ítems del carrito.
+
+✅ Manejo de Pedidos Complejos: Se ha solucionado la "amnesia de pedidos múltiples". El OrderTakingAgent ahora guía al usuario para procesar un ítem a la vez si la petición inicial es demasiado compleja, evitando la confusión y la pérdida de información.
+
+✅ Cero "Amnesia" de Datos: Se ha resuelto el bug de la dirección en blanco. El sistema ahora guarda la dirección en la memoria de la sesión y la recupera correctamente en el registro final, asegurando la integridad de los datos de principio a fin.
+
+3. Arquitectura Final del Sistema (v1.0)
+La arquitectura actual es un modelo de eficiencia y especialización:
+
+pizzeria_agents.py:
+
+RootOrchestratorAgent: Actúa como un "gerente de proyecto" con una lógica de enrutamiento basada en código (un CustomAgent), lo que lo hace 100% predecible. Dirige el flujo entre las fases A, B, C, D y E.
+Agentes Especialistas (CMA, OTA, OCA, DCA): Cada uno tiene instructions muy enfocadas en su única tarea, mejorando su fiabilidad y haciendo el sistema más fácil de mantener.
+pizzeria_tools.py:
+
+Las herramientas son asíncronas y robustas.
+Funciones clave como registrar_pedido_finalizado y register_update_customer son ahora autosuficientes y transaccionales, asegurando la consistencia de los datos.
+menu_cache.py y menu.json:
+
+Hemos desacoplado los datos del menú del código de la aplicación. El menu_cache.py carga el menu.json al inicio, proporcionando un acceso a los datos de forma instantánea y eliminando la sobrecarga de la API de Google Sheets.
+telegram_pizzeria_bot.py:
+
+Actúa como la capa de interfaz limpia, gestionando la comunicación con la API de Telegram y el Runner de ADK. Está configurado para un despliegue de producción estable con drop_pending_updates=True.
+4. Hoja de Ruta de Próximas Funcionalidades (El Futuro del Proyecto)
+Ahora que la base es sólida, podemos enfocarnos en expandir las capacidades del bot.
+
+Prioridad 1: Mejoras de Inteligencia y Datos
+
+Enriquecer menu.json con Alias: Añadir la clave "Alias" a productos como las bebidas para que el bot pueda entender "pepsi medio litro" como "Gaseosa Pepsi 500 ML". Esto mejorará drásticamente la flexibilidad de la búsqueda.
+Implementar Búsqueda por Ingredientes: Añadir la clave "Ingredientes" a cada pizza en el menu.json y actualizar la instruction del OrderTakingAgent para que pueda responder preguntas como "¿qué pizzas tienen carne de res?" sin alucinar, basándose en datos reales.
+Prioridad 2: Funcionalidades Avanzadas de Cliente
+
+Activar la "Ventana de 5 Minutos" para Modificar Pedidos:
+Plan: Implementar la lógica que ya diseñamos. El CustomerManagementAgent, al saludar a un cliente recurrente, usará la herramienta check_if_order_is_modifiable para ver si hay un pedido en los últimos 5 minutos. Si es así, le ofrecerá al cliente la opción de modificar ese pedido (manteniendo el carrito anterior) o iniciar uno nuevo.
+Prioridad 3: Integración Completa con el Negocio
+
+Implementar el Flujo de Aprobación del Personal:
+Paso A (Notificación): Modificar registrar_pedido_finalizado para que, además de guardar en Sheets, envíe una notificación a un canal de Telegram del personal con los detalles del nuevo pedido.
+Paso B (Respuesta): Crear un mecanismo para que el personal responda a esa notificación (ej. /aprobar <order_id> <costo_envio>) para confirmar el pedido y añadir el costo de envío.
+Paso C (Cierre): Crear un nuevo agente o lógica que procese la respuesta del personal, actualice el pedido en Google Sheets (cambiando el estado y añadiendo el costo) y notifique proactivamente al cliente el estado final.
+Prioridad 4: Capacidades Futuras
+
+Soporte Multimodal (Voz): Integrar un servicio de Speech-to-Text para que los clientes puedan enviar pedidos por mensajes de voz.
