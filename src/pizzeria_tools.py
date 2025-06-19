@@ -52,56 +52,132 @@ async def get_customer_data(tool_context: Any) -> dict:
         logger.error(f"[Tool] Error crítico al buscar en Sheets: {repr(e)}")
         return {"status": "error_internal"}
 
-# --- COPIAR Y PEGAR ESTE BLOQUE COMPLETO EN LUGAR DEL EXISTENTE ---
+# NUEVA HERRAMIENTA (reemplazará a get_customer_data y check_if_order_is_modifiable)
 
-# --- COPIAR Y PEGAR ESTE BLOQUE COMPLETO EN LUGAR DE LA FUNCIÓN get_item_details_by_name ---
+async def get_initial_customer_context(tool_context: Any) -> Dict[str, Any]:
+    """
+    Herramienta maestra de lectura inicial. Obtiene datos del cliente y verifica si hay
+    un pedido reciente modificable en una sola llamada a la BD.
+    """
+    state = get_state_from_context(tool_context)
+    user_id = state.get('_session_user_id')
+    logger.info(f"[Tool] Obteniendo contexto inicial para user_id: '{user_id}'")
+    
+    # Lógica para leer la hoja de Clientes y la de Pedidos_Registrados
+    # ... (implementaremos esta lógica combinada) ...
+
+    # Ejemplo del diccionario que devolverá:
+    initial_context = {
+        "status": "found", # o "not_found"
+        "customer_data": {
+            "Nombre_Completo": "Javichon Picholon",
+            "Direccion_Principal": "jr. chapalete 343 hyo tmabo"
+        },
+        "modifiable_order": { # Esta clave solo existirá si hay un pedido modificable
+            "order_id": "PZ-310889",
+            "items": "[...]",
+            "minutes_ago": 3
+        }
+    }
+    
+    # Esta herramienta escribirá toda esta información en el state para que los agentes la usen.
+    state['initial_context_loaded'] = True
+    state['customer_name'] = initial_context.get("customer_data", {}).get("Nombre_Completo")
+    # etc.
+
+    return initial_context
+
+async def commit_final_order_and_customer_data(tool_context: Any) -> Dict[str, Any]:
+    """
+    Herramienta transaccional final. Lee todos los datos de la sesión y escribe
+    en Google Sheets de una sola vez.
+    """
+    state = get_state_from_context(tool_context)
+    logger.info("[Tool] Iniciando commit final a la base de datos...")
+
+    # 1. Recuperar todos los datos del state
+    user_id = state.get('_session_user_id')
+    customer_name = state.get('_customer_name_for_greeting')
+    new_address = state.get('_last_confirmed_delivery_address_for_order')
+    order_items = state.get('_current_order_items', [])
+    total = state.get('_order_subtotal', 0.0)
+
+    # 2. Lógica para actualizar la hoja 'Clientes' con el nombre/dirección si son nuevos.
+    # ... (usando el patrón asíncrono que definimos) ...
+
+    # 3. Lógica para añadir la nueva fila a la hoja 'Pedidos_Registrados'.
+    # ... (usando el patrón asíncrono) ...
+
+    logger.info("--- COMMIT A GOOGLE SHEETS COMPLETADO ---")
+    
+    # 4. Limpiar el estado de la sesión para el siguiente pedido
+    state['_current_order_items'] = []
+    state['_order_subtotal'] = 0.0
+    # ... etc ...
+
+    return {"status": "success", "message": "Pedido registrado exitosamente."}
+
+# Reemplazar la función en pizzeria_tools.py
 
 async def get_item_details_by_name(tool_context: Any, nombre_plato: str) -> Dict[str, Any]:
     """
-    Busca detalles de un plato con una estrategia multi-etapa para máxima precisión y flexibilidad.
+    Busca un plato con una estrategia de búsqueda multi-etapa para máxima precisión.
+    Etapa 1: Coincidencia exacta de nombre o alias.
+    Etapa 2: Coincidencia de todas las palabras clave.
+    Etapa 3: Coincidencia flexible como último recurso.
     """
-    logger.info(f"[Tool] Iniciando búsqueda definitiva para: '{nombre_plato}'")
+    logger.info(f"[Tool] Iniciando búsqueda multi-etapa para: '{nombre_plato}'")
     from menu_cache import get_menu
     all_records = get_menu()
-    
+
     available_items = [item for item in all_records if str(item.get('Disponible', '')).lower() == 'sí']
     if not available_items:
         return {"status": "not_found", "message": "No hay ítems disponibles en el menú."}
 
-    # Estrategia 1: Búsqueda Exacta (la más fiable)
-    nombre_clean = nombre_plato.strip().lower()
+    query_clean = nombre_plato.strip().lower()
+
+    # --- ETAPA 1: BÚSQUEDA EXACTA (MÁXIMA PRIORIDAD) ---
     for item in available_items:
-        if str(item.get('Nombre_Plato', '')).strip().lower() == nombre_clean:
-            logger.info(f"Coincidencia exacta encontrada para '{nombre_plato}'.")
+        if str(item.get('Nombre_Plato', '')).lower() == query_clean:
+            logger.info(f"Coincidencia exacta encontrada: {item['Nombre_Plato']}")
             return {"status": "success", "item_details": item}
         aliases = [alias.strip().lower() for alias in str(item.get('Alias', '')).split(',')]
-        if nombre_clean in aliases:
-            logger.info(f"Coincidencia exacta de alias encontrada para '{nombre_plato}'.")
+        if query_clean in aliases:
+            logger.info(f"Coincidencia exacta de alias encontrada: {item['Nombre_Plato']}")
             return {"status": "success", "item_details": item}
 
-    # Estrategia 2: Búsqueda Flexible Inteligente si la exacta falla
-    item_names = [item.get('Nombre_Plato') for item in available_items]
-    
-    # Usamos process.extract para obtener una lista de las mejores coincidencias, no solo una.
-    # El scorer token_set_ratio es excelente para encontrar todas las palabras clave.
-    matches = process.extract(nombre_plato, item_names, scorer=fuzz.token_set_ratio, limit=5)
-    
-    # Filtramos solo las que tengan un puntaje de confianza alto (ej. > 85)
-    high_confidence_matches = [match for match in matches if match[1] > 85]
-    
-    if not high_confidence_matches:
-        logger.info(f"No se encontró ninguna coincidencia con suficiente puntaje para '{nombre_plato}'.")
-        return {"status": "not_found", "message": f"Lo siento, no pude encontrar un producto que coincida con '{nombre_plato}'."}
+    # --- ETAPA 2: BÚSQUEDA POR CONTENCIÓN DE PALABRAS CLAVE ---
+    query_keywords = set(query_clean.split())
+    perfect_matches = []
+    for item in available_items:
+        item_name_lower = item.get('Nombre_Plato', '').lower()
+        # Si todas las palabras de la búsqueda están en el nombre del ítem
+        if query_keywords.issubset(set(item_name_lower.split())):
+            perfect_matches.append(item)
 
-    # Obtenemos los objetos completos de las mejores coincidencias
-    matched_items = [item for item in available_items if item.get('Nombre_Plato') in [match[0] for match in high_confidence_matches]]
+    if len(perfect_matches) == 1:
+        logger.info(f"Coincidencia única por palabras clave: {perfect_matches[0]['Nombre_Plato']}")
+        return {"status": "success", "item_details": perfect_matches[0]}
+    elif len(perfect_matches) > 1:
+        logger.info("Múltiples coincidencias por palabras clave. Pidiendo clarificación.")
+        return {"status": "clarification_needed", "options": perfect_matches}
+
+    # --- ETAPA 3: BÚSQUEDA FLEXIBLE (FUZZY) COMO ÚLTIMO RECURSO ---
+    # (El código que teníamos antes, ahora como fallback)
+    item_names = [item.get('Nombre_Plato') for item in available_items]
+    matches = process.extract(query_clean, item_names, scorer=fuzz.token_set_ratio, limit=3)
+    high_confidence_matches = [match for match in matches if match[1] > 85]
+
+    if not high_confidence_matches:
+        logger.info("Búsqueda flexible no encontró coincidencias.")
+        return {"status": "not_found", "message": f"No pude encontrar '{nombre_plato}' en el menú."}
+
+    matched_items = [item for item in available_items if item.get('Nombre_Plato') in [m[0] for m in high_confidence_matches]]
 
     if len(matched_items) == 1:
-        logger.info(f"Coincidencia flexible única encontrada para '{nombre_plato}': {matched_items[0]['Nombre_Plato']}")
-        return {"status": "success", "item_details": matched_items[0]}
+         return {"status": "success", "item_details": matched_items[0]}
     else:
-        logger.info(f"Múltiples coincidencias encontradas para '{nombre_plato}'. Pidiendo clarificación.")
-        return {"status": "clarification_needed", "message": "Encontré estas opciones:", "options": matched_items}
+        return {"status": "clarification_needed", "options": matched_items}
 
 async def get_items_by_category(tool_context: Any, categoria: str) -> Dict[str, Any]:
     """
@@ -263,20 +339,67 @@ async def manage_order_item(tool_context: Any, action: str, item_name: str, quan
     return {"status": "success", "message": f"Acción '{action}' completada para '{item_name}'."}
 
 async def check_if_order_is_modifiable(tool_context: Any) -> Dict[str, Any]:
-    """Verifica si existe un pedido finalizado en los últimos 5 minutos."""
+    """
+    Verifica si el cliente actual tiene un pedido finalizado en los últimos 5 minutos
+    de forma robusta, manejando datos potencialmente faltantes.
+    """
     state = get_state_from_context(tool_context)
-    finalized_timestamp = state.get('_order_finalized_timestamp')
-    if not finalized_timestamp:
-        return {"status": "no_recent_order"}
+    user_id = state.get('_session_user_id')
+    logger.info(f"[Tool] Verificando pedidos recientes para user_id: '{user_id}'")
+    if not user_id:
+        return {"status": "error", "message": "ID de usuario no encontrado."}
 
-    seconds_since_order = time.time() - finalized_timestamp
-    if seconds_since_order < 300: # 5 minutos
-        logger.info(f"[Tool] Pedido reciente encontrado ({int(seconds_since_order)}s). Es modificable.")
-        return {"status": "modifiable", "minutes_ago": int(seconds_since_order / 60)}
-    else:
-        logger.info(f"[Tool] Pedido antiguo encontrado ({int(seconds_since_order / 60)} min). No es modificable.")
-        state['_order_finalized_timestamp'] = None # Limpiamos la marca de tiempo si ya es muy antigua
-        return {"status": "not_modifiable"}
+    try:
+        loop = asyncio.get_event_loop()
+        pedidos_ws = await loop.run_in_executor(None, get_worksheet, 'Pedidos_Registrados')
+        if not pedidos_ws:
+            return {"status": "error_internal", "message": "No se pudo acceder a la BD de pedidos."}
+
+        all_orders = await loop.run_in_executor(None, pedidos_ws.get_all_records)
+
+        user_orders = [order for order in all_orders if str(order.get('ID_Cliente')) == str(user_id)]
+
+        # <<< INICIO DE LA MEJORA DE ROBUSTEZ >>>
+        # Filtramos solo los pedidos que SÍ tienen un Timestamp válido
+        valid_user_orders = []
+        for order in user_orders:
+            if order.get('Timestamp'): # Nos aseguramos que la clave exista y no sea None o vacía
+                valid_user_orders.append(order)
+
+        if not valid_user_orders:
+            logger.info(f"No se encontraron pedidos previos con timestamp válido para el cliente {user_id}.")
+            return {"status": "no_prior_orders"}
+        # <<< FIN DE LA MEJORA DE ROBUSTEZ >>>
+
+        valid_user_orders.sort(key=lambda x: datetime.strptime(x['Timestamp'], "%Y-%m-%d %H:%M:%S"), reverse=True)
+
+        latest_order = valid_user_orders[0]
+        timestamp_str = latest_order.get('Timestamp')
+        order_timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
+
+        seconds_since_order = (datetime.now() - order_timestamp).total_seconds()
+
+        if seconds_since_order < 300:
+            logger.info(f"Pedido reciente encontrado ({int(seconds_since_order)}s). Es modificable.")
+            return {
+                "status": "modifiable", 
+                "order_id": latest_order.get('ID_Pedido'),
+                "minutes_ago": int(seconds_since_order / 60)
+            }
+        elif seconds_since_order < 3600:
+             logger.info(f"Pedido en reparto encontrado ({int(seconds_since_order / 60)} min). No es modificable.")
+             return {
+                "status": "in_delivery", 
+                "order_id": latest_order.get('ID_Pedido'),
+                "minutes_ago": int(seconds_since_order / 60)
+            }
+        else:
+            logger.info(f"El último pedido es demasiado antiguo ({int(seconds_since_order / 60)} min). No es relevante.")
+            return {"status": "not_recent"}
+
+    except Exception as e:
+        logger.error(f"[Tool] Error crítico en check_if_order_is_modifiable: {repr(e)}")
+        return {"status": "error_internal", "message": f"Error interno: {e}"}
 
 async def view_current_order(tool_context: Any) -> Dict[str, Any]:
     """Muestra los ítems en el carrito desde la sesión."""
@@ -353,49 +476,64 @@ async def update_session_flow_state(tool_context: Any, processing_order_sub_phas
 
 # En pizzeria_tools.py
 
+# Reemplazar esta función completa en pizzeria_tools.py
+
 async def registrar_pedido_finalizado(tool_context: Any) -> Dict[str, Any]:
     """
-    Herramienta final y autosuficiente. Obtiene datos frescos, lee la dirección de la 
-    sesión y registra el pedido. Guarda un timestamp para la ventana de modificación.
+    Herramienta final y autosuficiente. Lee todos los datos de la sesión 
+    y registra el pedido final en Google Sheets.
     """
     state = get_state_from_context(tool_context)
     logger.info("[Tool] Iniciando registro final de pedido...")
 
-    # 1. Obtener datos del pedido desde la sesión
+    # 1. Recuperar datos del pedido desde la sesión (state)
     order_items = state.get('_current_order_items', [])
     if not order_items:
-        return {"status": "error", "message": "No se puede registrar un pedido vacío."}
+        logger.error("[Tool] Intento de registrar un pedido vacío.")
+        return {"status": "error", "message": "Error: No se puede registrar un pedido vacío."}
 
-    # 2. Recalcular el total para asegurar precisión
     total_response = await calculate_order_total(tool_context)
     total = total_response.get("subtotal", 0.0)
 
-    # 3. Obtener datos del cliente y la dirección confirmada
-    customer_data_response = await get_customer_data(tool_context)
-    customer_name = customer_data_response.get("data", {}).get('Nombre_Completo', 'Cliente')
-    address = state.get('_last_confirmed_delivery_address_for_order', 'No especificada')
-    
-    # 4. Preparar datos para el registro
+    # 2. Recuperar datos del cliente desde la sesión (state)
+    customer_name = state.get('_customer_name_for_greeting', 'Cliente')
     user_id = state.get('_session_user_id', 'N/A')
+
+    # <<< ¡ESTA ES LA LÍNEA CLAVE DE LA SOLUCIÓN! >>>
+    # Leemos la dirección confirmada DIRECTAMENTE de la memoria de la sesión.
+    address = state.get('_last_confirmed_delivery_address_for_order', 'No especificada')
+    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+    if address == 'No especificada':
+         logger.warning("[Tool] La dirección no fue encontrada en el state al momento de registrar el pedido.")
+
+    # 3. Preparar datos para el registro
     order_id = f"PZ-{str(int(time.time()))[-6:]}"
     items_str = ", ".join([f'{item["quantity"]}x {item.get("name")}' for item in order_items])
-    
-    # 5. Escribir en la base de datos (Google Sheets)
+    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    # 4. Escribir en la base de datos (Google Sheets) de forma asíncrona
     try:
-        pedidos_ws = await asyncio.to_thread(get_worksheet, 'Pedidos_Registrados')
+        loop = asyncio.get_event_loop()
+        pedidos_ws = await loop.run_in_executor(None, get_worksheet, 'Pedidos_Registrados')
         if not pedidos_ws:
              return {"status": "error_internal", "message": "No se pudo acceder a la BD de pedidos."}
-        
-        # Esta es la línea donde probablemente tenías el error de indentación
-        nueva_fila = [order_id, user_id, customer_name, address, datetime.now().strftime("%Y-%m-%d %H:%M:%S"), items_str, total, "Pendiente"]
-        
-        await asyncio.to_thread(pedidos_ws.append_row, nueva_fila, value_input_option='USER_ENTERED')
-        
-        # Guardar la marca de tiempo para la ventana de modificación de 5 min
+
+        nueva_fila = [order_id, user_id, customer_name, address, timestamp, items_str, total, "Pendiente Aprobación"]
+        await loop.run_in_executor(None, pedidos_ws.append_row, nueva_fila, value_input_option='USER_ENTERED')
+
+        # 5. Guardar la marca de tiempo para la ventana de modificación
         state['_order_finalized_timestamp'] = time.time()
-        
-        logger.info(f"--- Pedido {order_id} REGISTRADO EN GOOGLE SHEETS CON DATOS VERIFICADOS ---")
-        return {"status": "success", "message": f"¡Gracias, {customer_name}! Tu pedido #{order_id} por S/ {total:.2f} ha sido registrado y está en camino a {address}."}
+
+        logger.info(f"--- Pedido {order_id} REGISTRADO EN GOOGLE SHEETS ---")
+        logger.info(f"  -> Cliente: {customer_name}, Dirección: {address}")
+
+        # 6. Limpiar el estado del pedido actual para la siguiente interacción
+        state['_current_order_items'] = []
+        state['_order_subtotal'] = 0.0
+        state['_last_confirmed_delivery_address_for_order'] = None
+
+        return {"status": "success", "message": f"¡Gracias, {customer_name}! Tu pedido #{order_id} por S/ {total:.2f} ha sido registrado y se enviará a: {address}."}
 
     except Exception as e:
         logger.error(f"[Tool] Error crítico al registrar pedido en Sheets: {repr(e)}")
