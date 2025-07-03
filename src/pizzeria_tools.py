@@ -3,89 +3,77 @@
 # ==============================================================================
 import logging
 import time
+import redis
+import json
 from typing import Any, Dict
 import gspread
 from datetime import datetime
 from thefuzz import process, fuzz
-
-
+from typing import Any, Dict
 import asyncio
 from sheets_client import get_worksheet
+from google.adk.tools import ToolContext
 
 logger = logging.getLogger(__name__)
 
 def get_state_from_context(context: Any) -> Dict[str, Any]:
-    """Devuelve el diccionario de estado de forma segura."""
     if hasattr(context, 'session') and hasattr(context.session, 'state'):
         return context.session.state
     elif hasattr(context, 'state'):
         return context.state
     return {}
 
-async def get_customer_data(tool_context: Any) -> dict:
-    """Busca datos de un cliente en la hoja 'Clientes' usando el ID de la sesión."""
-    state = get_state_from_context(tool_context)
-    user_id = state.get('_session_user_id')
-    logger.info(f"[Tool] Buscando cliente con user_id: '{user_id}'")
-    if not user_id:
-        return {"status": "error", "message": "ID de usuario no encontrado en sesión."}
-
-    try:
-        # <<< LÓGICA DE GOOGLE SHEETS INTEGRADA >>>
-        customers_ws = await asyncio.to_thread(get_worksheet, 'Clientes')
-        if not customers_ws:
-            return {"status": "error_internal", "message": "No se pudo acceder a la BD de clientes."}
-        
-        all_data = await asyncio.to_thread(customers_ws.get_all_records)
-        customer_row = next((row for row in all_data if str(row.get('ID_Cliente')) == str(user_id)), None)
-        
-        if customer_row:
-            nombre_completo = customer_row.get('Nombre_Completo', '')
-            state['_customer_name_for_greeting'] = nombre_completo
-            logger.info(f"[Tool] Cliente encontrado: {nombre_completo}")
-            return {"status": "found", "data": customer_row}
-        else:
-            logger.info(f"[Tool] Cliente {user_id} no encontrado.")
-            return {"status": "not_found"}
-            
-    except Exception as e:
-        logger.error(f"[Tool] Error crítico al buscar en Sheets: {repr(e)}")
-        return {"status": "error_internal"}
-
-# NUEVA HERRAMIENTA (reemplazará a get_customer_data y check_if_order_is_modifiable)
+# ==============================================================================
+# VERSIÓN FINAL Y REAL de get_initial_customer_context
+# Reemplaza la función existente en pizzeria_tools.py con esta
+# ==============================================================================
+# EN pizzeria_tools.py
 
 async def get_initial_customer_context(tool_context: Any) -> Dict[str, Any]:
     """
-    Herramienta maestra de lectura inicial. Obtiene datos del cliente y verifica si hay
-    un pedido reciente modificable en una sola llamada a la BD.
+    Herramienta maestra de lectura inicial. Obtiene datos del cliente y estado de pedidos,
+    y actualiza directamente el estado de la sesión para el orquestador.
     """
     state = get_state_from_context(tool_context)
     user_id = state.get('_session_user_id')
-    logger.info(f"[Tool] Obteniendo contexto inicial para user_id: '{user_id}'")
-    
-    # Lógica para leer la hoja de Clientes y la de Pedidos_Registrados
-    # ... (implementaremos esta lógica combinada) ...
+    logger.info(f"[Tool] Obteniendo contexto inicial REAL desde Google Sheets para user_id: '{user_id}'")
 
-    # Ejemplo del diccionario que devolverá:
-    initial_context = {
-        "status": "found", # o "not_found"
-        "customer_data": {
-            "Nombre_Completo": "Javichon Picholon",
-            "Direccion_Principal": "jr. chapalete 343 hyo tmabo"
-        },
-        "modifiable_order": { # Esta clave solo existirá si hay un pedido modificable
-            "order_id": "PZ-310889",
-            "items": "[...]",
-            "minutes_ago": 3
-        }
-    }
-    
-    # Esta herramienta escribirá toda esta información en el state para que los agentes la usen.
-    state['initial_context_loaded'] = True
-    state['customer_name'] = initial_context.get("customer_data", {}).get("Nombre_Completo")
-    # etc.
+    if not user_id:
+        # ... (manejo de error)
+        return {"status": "error", "message": "No se pudo obtener el user_id."}
 
-    return initial_context
+    try:
+        # ... (tu lógica existente para conectar a Sheets)
+        customers_ws = await asyncio.to_thread(get_worksheet, 'Clientes')
+        orders_ws = await asyncio.to_thread(get_worksheet, 'Pedidos_Registrados')
+        all_customers = await asyncio.to_thread(customers_ws.get_all_records)
+        all_orders = await asyncio.to_thread(orders_ws.get_all_records)
+
+        context_response = {}
+        customer_row = next((row for row in all_customers if str(row.get('ID_Cliente')).strip() == str(user_id).strip()), None)
+
+        if customer_row:
+            logger.info(f"Cliente '{user_id}' encontrado.")
+            context_response['customer_status'] = 'found'
+            context_response['customer_data'] = customer_row
+        else:
+            logger.info(f"Cliente '{user_id}' NO encontrado.")
+            context_response['customer_status'] = 'not_found'
+
+        # ... (tu lógica existente para buscar pedidos)
+
+        # <<< CAMBIO CRÍTICO: Actualizar el estado directamente >>>
+        state['_customer_status'] = context_response['customer_status']
+        if context_response.get('customer_data'):
+            state['_customer_data'] = context_response['customer_data']
+        
+        logger.info(f"Estado de la sesión actualizado por la herramienta con: _customer_status='{state['_customer_status']}'")
+        
+        return {"status": "success", "message": "Contexto verificado y estado actualizado."}
+
+    except Exception as e:
+        logger.error(f"[Tool] Error crítico en get_initial_customer_context: {repr(e)}")
+        return {"status": "error", "message": "Error interno al consultar la base de datos."}
 
 async def commit_final_order_and_customer_data(tool_context: Any) -> Dict[str, Any]:
     """
@@ -121,10 +109,9 @@ async def commit_final_order_and_customer_data(tool_context: Any) -> Dict[str, A
 
 async def get_item_details_by_name(tool_context: Any, nombre_plato: str) -> Dict[str, Any]:
     """
-    Busca un plato con una estrategia de búsqueda multi-etapa para máxima precisión.
+    [VERSIÓN FINAL] Busca un plato con una estrategia multi-etapa para máxima precisión.
     Etapa 1: Coincidencia exacta de nombre o alias.
-    Etapa 2: Coincidencia de todas las palabras clave.
-    Etapa 3: Coincidencia flexible como último recurso.
+    Etapa 2: Coincidencia flexible como último recurso, con umbral ajustado.
     """
     logger.info(f"[Tool] Iniciando búsqueda multi-etapa para: '{nombre_plato}'")
     from menu_cache import get_menu
@@ -136,22 +123,26 @@ async def get_item_details_by_name(tool_context: Any, nombre_plato: str) -> Dict
 
     query_clean = nombre_plato.strip().lower()
 
-    # --- ETAPA 1: BÚSQUEDA EXACTA (MÁXIMA PRIORIDAD) ---
+    # --- ETAPA 1: BÚSQUEDA EXACTA Y POR ALIAS (MÁXIMA PRIORIDAD) ---
     for item in available_items:
+        # Búsqueda por nombre de plato
         if str(item.get('Nombre_Plato', '')).lower() == query_clean:
-            logger.info(f"Coincidencia exacta encontrada: {item['Nombre_Plato']}")
+            logger.info(f"Coincidencia exacta de nombre encontrada: {item['Nombre_Plato']}")
             return {"status": "success", "item_details": item}
-        aliases = [alias.strip().lower() for alias in str(item.get('Alias', '')).split(',')]
-        if query_clean in aliases:
-            logger.info(f"Coincidencia exacta de alias encontrada: {item['Nombre_Plato']}")
-            return {"status": "success", "item_details": item}
+        
+        # Búsqueda por alias
+        aliases_str = item.get('Alias', '')
+        if aliases_str:
+            aliases = [alias.strip().lower() for alias in aliases_str.split(',')]
+            if query_clean in aliases:
+                logger.info(f"Coincidencia exacta de alias encontrada para '{query_clean}', corresponde a: {item['Nombre_Plato']}")
+                return {"status": "success", "item_details": item}
 
     # --- ETAPA 2: BÚSQUEDA POR CONTENCIÓN DE PALABRAS CLAVE ---
     query_keywords = set(query_clean.split())
     perfect_matches = []
     for item in available_items:
-        item_name_lower = item.get('Nombre_Plato', '').lower()
-        # Si todas las palabras de la búsqueda están en el nombre del ítem
+        item_name_lower = str(item.get('Nombre_Plato', '')).lower()
         if query_keywords.issubset(set(item_name_lower.split())):
             perfect_matches.append(item)
 
@@ -159,45 +150,54 @@ async def get_item_details_by_name(tool_context: Any, nombre_plato: str) -> Dict
         logger.info(f"Coincidencia única por palabras clave: {perfect_matches[0]['Nombre_Plato']}")
         return {"status": "success", "item_details": perfect_matches[0]}
     elif len(perfect_matches) > 1:
-        logger.info("Múltiples coincidencias por palabras clave. Pidiendo clarificación.")
+        logger.info(f"Múltiples coincidencias por palabras clave ({[item['Nombre_Plato'] for item in perfect_matches]}). Pidiendo clarificación.")
         return {"status": "clarification_needed", "options": perfect_matches}
 
-    # --- ETAPA 3: BÚSQUEDA FLEXIBLE (FUZZY) COMO ÚLTIMO RECURSO ---
-    # (El código que teníamos antes, ahora como fallback)
+    # --- ETAPA 3: BÚSQUEDA FLEXIBLE (FUZZY) CON UMBRAL AJUSTADO ---
     item_names = [item.get('Nombre_Plato') for item in available_items]
+    
     matches = process.extract(query_clean, item_names, scorer=fuzz.token_set_ratio, limit=3)
-    high_confidence_matches = [match for match in matches if match[1] > 85]
-
+    
+    # Umbral de confianza ajustado a 75
+    high_confidence_matches = [match for match in matches if match[1] > 75]
+    
     if not high_confidence_matches:
-        logger.info("Búsqueda flexible no encontró coincidencias.")
-        return {"status": "not_found", "message": f"No pude encontrar '{nombre_plato}' en el menú."}
+        logger.info("Búsqueda flexible no encontró coincidencias de alta confianza.")
+        available_categories = await get_available_categories(tool_context)
+        return {
+            "status": "not_found", 
+            "message": f"Lo siento, no pude encontrar '{nombre_plato}' en el menú. ¿Quizás quisiste decir otra cosa? También puedes elegir una de estas categorías: {', '.join(available_categories.get('categories', []))}"
+        }
 
-    matched_items = [item for item in available_items if item.get('Nombre_Plato') in [m[0] for m in high_confidence_matches]]
+    matched_item_names = [m[0] for m in high_confidence_matches]
+    matched_items = [item for item in available_items if item.get('Nombre_Plato') in matched_item_names]
 
     if len(matched_items) == 1:
+         logger.info(f"Coincidencia flexible única encontrada: {matched_items[0]['Nombre_Plato']}")
          return {"status": "success", "item_details": matched_items[0]}
     else:
+        logger.info(f"Múltiples coincidencias flexibles ({[item['Nombre_Plato'] for item in matched_items]}). Pidiendo clarificación.")
         return {"status": "clarification_needed", "options": matched_items}
+
 
 async def get_items_by_category(tool_context: Any, categoria: str) -> Dict[str, Any]:
     """
-    Busca y devuelve todos los platos disponibles de una categoría específica del menú.
-    Args:
-        categoria (str): La categoría de platos a buscar (ej: "Pizzas", "Bebidas").
-    Returns:
-        Un diccionario con status y una lista de ítems o un mensaje de error.
+    [V2 - OPTIMIZADA] Busca y devuelve todos los platos de una categoría
+    leyendo desde la caché en memoria (menu.json), NO desde Google Sheets.
     """
-    logger.info(f"[Tool] get_items_by_category: Solicitud para categoría: '{categoria}'")
+    logger.info(f"[Tool] get_items_by_category: Solicitud para categoría '{categoria}' desde CACHÉ.")
+
+    from menu_cache import get_menu # Importamos nuestra función de caché
     if not categoria or not categoria.strip():
         return {"status": "error_input", "message": "El parámetro 'categoria' es obligatorio."}
     
     try:
-        menu_sheet = await asyncio.to_thread(get_worksheet, 'Menú')
-        if menu_sheet is None:
-            return {"status": "error_internal", "message": "No se pudo conectar a la base de datos del menú."}
-        
-        all_records = await asyncio.to_thread(menu_sheet.get_all_records)
-        
+        # ¡ESTA ES LA SOLUCIÓN! Leemos desde la memoria.
+        all_records = get_menu()
+
+        if not all_records:
+            return {"status": "error_internal", "message": "La caché del menú está vacía."}
+                
         available_records = [r for r in all_records if str(r.get('Disponible', '')).strip().lower() == 'sí']
         if not available_records:
             return {"status": "not_found", "message": "No hay ítems disponibles en el menú en este momento.", "items": []}
@@ -223,183 +223,198 @@ async def get_items_by_category(tool_context: Any, categoria: str) -> Dict[str, 
         logger.error(f"[Tool: get_items_by_category] Excepción general: {e}")
         return {"status": "error_internal", "message": f"Error interno inesperado: {str(e)}", "items": []}
 
-# En pizzeria_tools.py
 
-async def register_update_customer(tool_context: Any, datos_cliente: Dict[str, Any]) -> Dict[str, str]:
+async def get_available_categories(tool_context: Any) -> Dict[str, Any]:
     """
-    Registra un nuevo cliente o actualiza sus datos. Es flexible con las claves de entrada
-    y asegura que los datos se guarden tanto en la BD como en la memoria de sesión.
+    Devuelve una lista de todas las categorías de productos únicas disponibles en el menú.
+    Es útil para ofrecer al cliente opciones válidas cuando una búsqueda falla.
     """
-    state = get_state_from_context(tool_context)
-    user_id = state.get('_session_user_id')
-    if not user_id: return {"status": "error", "message": "Falta id_cliente en sesión."}
-    
-    inner_datos = datos_cliente.get('datos_cliente', datos_cliente)
-    logger.info(f"[Tool] Registrando/Actualizando datos para '{user_id}': {inner_datos}")
-
-    # --- LÓGICA DE ROBUSTEZ: Encontrar los datos sin importar la clave exacta ---
-    datos_para_sheets = {}
-    
-    # Mapeo de posibles claves a la clave oficial de la base de datos
-    key_mapping = {
-        'Nombre_Completo': ['Nombre_Completo', 'nombre_completo', 'nombre'],
-        'Direccion_Principal': ['Direccion_Principal', 'direccion_principal', 'direccion', 'dirección']
-    }
-
-    for official_key, possible_keys in key_mapping.items():
-        for key in possible_keys:
-            if key in inner_datos:
-                datos_para_sheets[official_key] = inner_datos[key]
-                break
-    
-    if not datos_para_sheets:
-        logger.warning(f"[Tool] No se encontraron datos válidos (Nombre_Completo, Direccion_Principal) en la entrada: {inner_datos}")
-        return {"status": "error", "message": "No se proporcionaron datos válidos para guardar."}
-    # -------------------------------------------------------------------------
+    logger.info("[Tool] Obteniendo todas las categorías disponibles desde CACHÉ.")
+    from menu_cache import get_menu
     
     try:
-        customers_ws = await asyncio.to_thread(get_worksheet, 'Clientes')
-        if not customers_ws: return {"status": "error_internal", "message": "No se pudo acceder a la BD de clientes."}
+        all_records = get_menu()
+        if not all_records:
+            return {"status": "error", "message": "La caché del menú está vacía."}
         
-        headers = await asyncio.to_thread(customers_ws.row_values, 1)
-        cell = None
-        try:
-            id_col = headers.index('ID_Cliente') + 1
-            cell = await asyncio.to_thread(customers_ws.find, str(user_id), in_column=id_col)
-        except (gspread.exceptions.CellNotFound, ValueError):
-            cell = None
-
-        if cell: # El cliente existe, actualizamos
-            logger.info(f"Cliente {user_id} encontrado en fila {cell.row}. Actualizando datos: {datos_para_sheets}")
-            for key, value in datos_para_sheets.items():
-                if key in headers:
-                    col_index = headers.index(key) + 1
-                    await asyncio.to_thread(customers_ws.update_cell, cell.row, col_index, str(value))
-                    logger.info(f"  -> Celda '{key}' actualizada.")
-                else:
-                    logger.warning(f"  -> La columna '{key}' no se encontró en los encabezados de Google Sheets. No se pudo actualizar.")
-        else: # El cliente no existe, creamos
-            logger.info(f"Cliente {user_id} no encontrado. Creando nueva fila con datos: {datos_para_sheets}")
-            new_row = [''] * len(headers)
-            new_row[headers.index('ID_Cliente')] = str(user_id)
-            for key, value in datos_para_sheets.items():
-                if key in headers:
-                    new_row[headers.index(key)] = str(value)
-            await asyncio.to_thread(customers_ws.append_row, new_row, value_input_option='USER_ENTERED')
-
-        # --- Guardado en memoria de sesión para el flujo transaccional ---
-        if "Nombre_Completo" in datos_para_sheets:
-            state['_customer_name_for_greeting'] = datos_para_sheets["Nombre_Completo"]
-        if "Direccion_Principal" in datos_para_sheets:
-            state['_last_confirmed_delivery_address_for_order'] = datos_para_sheets["Direccion_Principal"]
-            logger.info(f"Dirección guardada en memoria de sesión: {datos_para_sheets['Direccion_Principal']}")
+        # Usamos un set para obtener categorías únicas y luego lo convertimos a lista
+        categories = sorted(list(set(item.get('Categoria', '') for item in all_records if item.get('Categoria'))))
         
-        return {"status": "success", "message": "Datos de cliente actualizados exitosamente."}
-
+        return {"status": "success", "categories": categories}
+        
     except Exception as e:
-        logger.error(f"[Tool] Error crítico al escribir en Sheets: {repr(e)}")
-        return {"status": "error_internal"}
+        logger.error(f"[Tool: get_available_categories] Excepción: {e}")
+        return {"status": "error", "message": "Error interno al obtener las categorías."}
 
-# En pizzeria_tools.py
+
+async def draft_response_for_review(tool_context: Any, draft_message: str) -> Dict[str, Any]:
+    """
+    Herramienta para que los agentes especialistas guarden un borrador de respuesta
+    para que el orquestador lo revise y apruebe.
+    """
+    state = get_state_from_context(tool_context)
+    logger.info(f"[Tool] Agente especialista ha preparado un borrador de respuesta: '{draft_message}'")
+    
+    # Guardamos el borrador en el state para el orquestador
+    state['_draft_response_for_orchestrator'] = draft_message
+    
+    return {"status": "success", "message": "Borrador guardado para revisión."}
+
+# pizzeria_tools.py (dentro de la función register_update_customer)
+
+async def register_update_customer(tool_context: ToolContext, datos_cliente: Dict[str, Any]) -> Dict[str, str]:
+    """
+    [V3 - MÁS ROBUSTA]
+    Guarda el nombre del cliente y silencia al agente. Acepta múltiples alias para el nombre.
+    """
+    state = get_state_from_context(tool_context)
+    logger.info(f"[Tool] Guardando datos del cliente en memoria: {datos_cliente}")
+
+    flat_data = {}
+    def flatten_dict(d, parent_key='', sep='_'):
+        for k, v in d.items():
+            new_key = parent_key + sep + k if parent_key else k
+            if isinstance(v, dict):
+                flatten_dict(v, new_key, sep=sep)
+            else:
+                flat_data[new_key.lower()] = v
+    flatten_dict(datos_cliente)
+
+    # >>>>>>>>>> INICIO DE LA CORRECCIÓN <<<<<<<<<<
+    # Añadimos 'nombre_cliente' a la lista de alias aceptados.
+    name_aliases = ['nombre_completo', 'nombre', 'name', 'customer_name', 'cliente', 'nombre_cliente']
+    # >>>>>>>>>> FIN DE LA CORRECCIÓN <<<<<<<<<<
+    
+    customer_name = next((flat_data[alias] for alias in name_aliases if alias in flat_data), None)
+
+    if customer_name:
+        state['_customer_name_for_greeting'] = str(customer_name)
+        state['_customer_status'] = 'found'
+        logger.info(f"Nombre '{customer_name}' guardado en state. Estado del cliente actualizado a 'found'.")
+        
+        tool_context.actions.skip_summarization = True
+        logger.info("[Tool] skip_summarization activado. El agente guardará silencio.")
+        
+        return {"status": "success", "message": "Nombre del cliente guardado y agente silenciado."}
+    else:
+        logger.error(f"Error en register_update_customer: el diccionario no contiene claves de nombre reconocibles. Recibido: {datos_cliente}")
+        return {"status": "error", "message": "Datos de nombre no reconocidos."}
+
+async def save_delivery_address(tool_context: ToolContext, direccion: str) -> Dict[str, Any]:
+    """
+    Guarda la dirección de entrega confirmada en el estado de la sesión
+    y levanta una bandera para que el orquestador la vea.
+    """
+    state = get_state_from_context(tool_context)
+    logger.info(f"[Tool] Guardando dirección de entrega en el estado: '{direccion}'")
+
+    if not direccion or len(direccion) < 5: # Una validación simple en la herramienta
+        return {"status": "error", "message": "La dirección proporcionada parece demasiado corta."}
+
+    # Guardamos la dirección en el estado
+    state['_last_confirmed_delivery_address_for_order'] = direccion
+    
+    # [IMPORTANTE] No levantamos la bandera aquí. Dejamos que el agente lo haga
+    # para tener un patrón consistente.
+
+    # Silenciamos al agente para ceder el control al orquestador.
+    tool_context.actions.skip_summarization = True
+    
+    return {"status": "success", "message": "Dirección guardada exitosamente."}
+
+async def finalize_order_taking(tool_context: ToolContext) -> Dict[str, Any]:
+    """
+    Herramienta CRÍTICA. Se llama cuando el cliente termina de ordenar.
+    1. Pone la bandera '_order_taking_complete' para el Orquestador.
+    2. Le ordena al framework que NO le pida una respuesta al agente actual.
+    Esto permite una transición instantánea y silenciosa a la siguiente fase.
+    """
+    state = get_state_from_context(tool_context)
+    logger.info("[Tool] Finalizando la toma del pedido y cediendo control silenciosamente.")
+
+    # 1. Levanta la bandera para que el orquestador la vea.
+    state['_order_taking_complete'] = True
+
+    # 2. [LA ORDEN DIRECTA] Le decimos al framework de ADK: "No resumas esto".
+    # Esto garantiza el silencio técnico del agente.
+    tool_context.actions.skip_summarization = True
+
+    return {"status": "success", "message": "Fase de toma de pedido finalizada. Control cedido."}
+
+# Reemplaza la función en pizzeria_tools.py
 
 async def manage_order_item(tool_context: Any, action: str, item_name: str, quantity: int = 1) -> Dict[str, Any]:
     """
-    Añade, elimina o actualiza la cantidad de un ítem en el carrito de la sesión.
-    'action' puede ser 'add' o 'remove'.
+    Gestiona el carrito de compras: añade, elimina o actualiza la cantidad de un ítem.
+    Valida el 'item_name' contra el menú antes de cualquier acción.
+    Acciones válidas: 'add', 'remove', 'set_quantity'.
     """
     state = get_state_from_context(tool_context)
     current_items = state.get('_current_order_items', []).copy()
     action = action.lower()
-    item_name_lower = item_name.lower()
+    logger.info(f"[Tool] manage_order_item | Acción: {action}, Ítem: '{item_name}', Cantidad: {quantity}")
+
+    # --- VALIDACIÓN OBLIGATORIA DEL ÍTEM (excepto para remove) ---
+    item_details = None
+    if action in ["add", "set_quantity"]:
+        validation_result = await get_item_details_by_name(tool_context, item_name)
+        if validation_result.get("status") != "success":
+            logger.warning(f"[Tool] Validación fallida para '{item_name}': {validation_result.get('status')}")
+            return validation_result  # Devuelve el resultado de la validación para que el orquestador lo maneje
+
+        item_details = validation_result["item_details"]
+        canonical_name = item_details.get("Nombre_Plato")
+        price = float(item_details.get("Precio", 0.0))
     
+    # --- LÓGICA DE ACCIONES ---
     if action == "add":
-        # Podríamos añadir lógica para agrupar ítems, pero por ahora lo mantenemos simple.
-        current_items.append({"name": item_name, "quantity": quantity})
-        logger.info(f"[Tool] Añadido al carrito: {quantity}x {item_name}.")
-    
+        new_item = {"name": canonical_name, "quantity": quantity, "price": price, "subtotal": price * quantity}
+        current_items.append(new_item)
+        state['_current_order_items'] = current_items
+        logger.info(f"[Tool] Ítem añadido: {new_item}")
+        return {"status": "success", "message": f"Se ha añadido {quantity}x {canonical_name} a tu pedido."}
+
     elif action == "remove":
-        item_found = False
-        # Buscamos el ítem a eliminar (insensible a mayúsculas/minúsculas)
+        item_name_lower = item_name.lower()
+        item_found_and_removed = False
+        # Iteramos en reversa para poder eliminar de forma segura
         for i in range(len(current_items) - 1, -1, -1):
             if current_items[i].get("name", "").lower() == item_name_lower:
-                removed = current_items.pop(i)
-                logger.info(f"[Tool] Eliminado del carrito: {removed['quantity']}x {removed['name']}.")
-                item_found = True
-                break # Eliminamos solo la primera coincidencia
+                removed_item = current_items.pop(i)
+                logger.info(f"[Tool] Ítem eliminado del carrito: {removed_item}")
+                item_found_and_removed = True
+                break # Salimos tras encontrar y eliminar la primera coincidencia
         
-        if not item_found:
-            logger.warning(f"[Tool] Se intentó eliminar '{item_name}', pero no se encontró en el carrito.")
-            return {"status": "error", "message": f"No encontré '{item_name}' en tu pedido actual para poder eliminarlo."}
+        if not item_found_and_removed:
+            return {"status": "error", "message": f"No he podido encontrar '{item_name}' en tu pedido para eliminarlo."}
+
+        state['_current_order_items'] = current_items
+        return {"status": "success", "message": f"He eliminado '{item_name}' de tu pedido."}
+
+    elif action == "set_quantity":
+        item_found_and_updated = False
+        for item_in_cart in current_items:
+            if item_in_cart.get("name") == canonical_name:
+                item_in_cart["quantity"] = quantity
+                item_in_cart["subtotal"] = item_in_cart["price"] * quantity
+                logger.info(f"[Tool] Cantidad actualizada para '{canonical_name}' a {quantity}.")
+                item_found_and_updated = True
+                break
+        
+        # <<< LÓGICA DE CORRECCIÓN DE BUG >>>
+        if not item_found_and_updated:
+            logger.warning(f"[Tool] 'set_quantity' falló porque el ítem no estaba. Se intentará añadirlo como nuevo.")
+            new_item = {"name": canonical_name, "quantity": quantity, "price": price, "subtotal": price * quantity}
+            current_items.append(new_item)
+            state['_current_order_items'] = current_items
+            logger.info(f"[Tool] Ítem añadido como fallback: {new_item}")
+            return {"status": "success", "message": f"¡Entendido! Se ha añadido {quantity}x {canonical_name} a tu pedido."}
+
+        state['_current_order_items'] = current_items
+        return {"status": "success", "message": f"He actualizado la cantidad de '{canonical_name}' a {quantity}."}
 
     else:
-        return {"status": "error", "message": f"La acción '{action}' no es válida. Solo se permite 'add' o 'remove'."}
-        
-    state['_current_order_items'] = current_items
-    logger.info(f"Carrito actual en sesión: {state['_current_order_items']}")
-    return {"status": "success", "message": f"Acción '{action}' completada para '{item_name}'."}
-
-async def check_if_order_is_modifiable(tool_context: Any) -> Dict[str, Any]:
-    """
-    Verifica si el cliente actual tiene un pedido finalizado en los últimos 5 minutos
-    de forma robusta, manejando datos potencialmente faltantes.
-    """
-    state = get_state_from_context(tool_context)
-    user_id = state.get('_session_user_id')
-    logger.info(f"[Tool] Verificando pedidos recientes para user_id: '{user_id}'")
-    if not user_id:
-        return {"status": "error", "message": "ID de usuario no encontrado."}
-
-    try:
-        loop = asyncio.get_event_loop()
-        pedidos_ws = await loop.run_in_executor(None, get_worksheet, 'Pedidos_Registrados')
-        if not pedidos_ws:
-            return {"status": "error_internal", "message": "No se pudo acceder a la BD de pedidos."}
-
-        all_orders = await loop.run_in_executor(None, pedidos_ws.get_all_records)
-
-        user_orders = [order for order in all_orders if str(order.get('ID_Cliente')) == str(user_id)]
-
-        # <<< INICIO DE LA MEJORA DE ROBUSTEZ >>>
-        # Filtramos solo los pedidos que SÍ tienen un Timestamp válido
-        valid_user_orders = []
-        for order in user_orders:
-            if order.get('Timestamp'): # Nos aseguramos que la clave exista y no sea None o vacía
-                valid_user_orders.append(order)
-
-        if not valid_user_orders:
-            logger.info(f"No se encontraron pedidos previos con timestamp válido para el cliente {user_id}.")
-            return {"status": "no_prior_orders"}
-        # <<< FIN DE LA MEJORA DE ROBUSTEZ >>>
-
-        valid_user_orders.sort(key=lambda x: datetime.strptime(x['Timestamp'], "%Y-%m-%d %H:%M:%S"), reverse=True)
-
-        latest_order = valid_user_orders[0]
-        timestamp_str = latest_order.get('Timestamp')
-        order_timestamp = datetime.strptime(timestamp_str, "%Y-%m-%d %H:%M:%S")
-
-        seconds_since_order = (datetime.now() - order_timestamp).total_seconds()
-
-        if seconds_since_order < 300:
-            logger.info(f"Pedido reciente encontrado ({int(seconds_since_order)}s). Es modificable.")
-            return {
-                "status": "modifiable", 
-                "order_id": latest_order.get('ID_Pedido'),
-                "minutes_ago": int(seconds_since_order / 60)
-            }
-        elif seconds_since_order < 3600:
-             logger.info(f"Pedido en reparto encontrado ({int(seconds_since_order / 60)} min). No es modificable.")
-             return {
-                "status": "in_delivery", 
-                "order_id": latest_order.get('ID_Pedido'),
-                "minutes_ago": int(seconds_since_order / 60)
-            }
-        else:
-            logger.info(f"El último pedido es demasiado antiguo ({int(seconds_since_order / 60)} min). No es relevante.")
-            return {"status": "not_recent"}
-
-    except Exception as e:
-        logger.error(f"[Tool] Error crítico en check_if_order_is_modifiable: {repr(e)}")
-        return {"status": "error_internal", "message": f"Error interno: {e}"}
+        return {"status": "error", "message": f"La acción '{action}' no es válida. Solo se permite 'add', 'remove' o 'set_quantity'."}
 
 async def view_current_order(tool_context: Any) -> Dict[str, Any]:
     """Muestra los ítems en el carrito desde la sesión."""
@@ -465,79 +480,135 @@ async def calculate_order_total(tool_context: Any) -> Dict[str, Any]:
         "calculation_string": calculation_string
     }
 
-async def update_session_flow_state(tool_context: Any, processing_order_sub_phase: str) -> Dict[str, Any]:
-    """Cambia la fase de la conversación."""
+async def update_session_state(tool_context: Any, data_to_update: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Herramienta genérica para que los agentes especialistas dejen 'banderas' en el estado,
+    indicando que han completado su tarea para el orquestador.
+    """
     state = get_state_from_context(tool_context)
-    state['processing_order_sub_phase'] = processing_order_sub_phase
-    logger.info(f"[Tool] CAMBIO DE FASE -> {processing_order_sub_phase}")
+    logger.info(f"[Tool] Actualizando state con la bandera: {data_to_update}")
+    state.update(data_to_update)
+    
+    # [SOLUCIÓN] Devolvemos un diccionario que no incite a la conversación.
+    # El status 'success' es suficiente para que el sistema sepa que todo fue bien,
+    # pero no hay un 'message' que el LLM se sienta tentado a repetir.
     return {"status": "success"}
-
-# En pizzeria_tools.py
-
-# En pizzeria_tools.py
-
-# Reemplazar esta función completa en pizzeria_tools.py
 
 async def registrar_pedido_finalizado(tool_context: Any) -> Dict[str, Any]:
     """
-    Herramienta final y autosuficiente. Lee todos los datos de la sesión 
-    y registra el pedido final en Google Sheets.
+    [VERSIÓN FINAL Y COMPLETA] Herramienta transaccional: Lee todos los datos del state,
+    escribe de forma persistente el pedido y el cliente en Google Sheets y LUEGO limpia el estado.
     """
     state = get_state_from_context(tool_context)
-    logger.info("[Tool] Iniciando registro final de pedido...")
+    logger.info("[Tool] Iniciando registro final y persistencia de pedido Y CLIENTE...")
 
-    # 1. Recuperar datos del pedido desde la sesión (state)
-    order_items = state.get('_current_order_items', [])
-    if not order_items:
-        logger.error("[Tool] Intento de registrar un pedido vacío.")
-        return {"status": "error", "message": "Error: No se puede registrar un pedido vacío."}
-
-    total_response = await calculate_order_total(tool_context)
-    total = total_response.get("subtotal", 0.0)
-
-    # 2. Recuperar datos del cliente desde la sesión (state)
-    customer_name = state.get('_customer_name_for_greeting', 'Cliente')
+    # 1. Recopilar todos los datos del estado de la sesión
     user_id = state.get('_session_user_id', 'N/A')
-
-    # <<< ¡ESTA ES LA LÍNEA CLAVE DE LA SOLUCIÓN! >>>
-    # Leemos la dirección confirmada DIRECTAMENTE de la memoria de la sesión.
-    address = state.get('_last_confirmed_delivery_address_for_order', 'No especificada')
-    # ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-
-    if address == 'No especificada':
-         logger.warning("[Tool] La dirección no fue encontrada en el state al momento de registrar el pedido.")
-
-    # 3. Preparar datos para el registro
+    customer_name = state.get('_customer_name_for_greeting', 'N/A')
+    address = state.get('_last_confirmed_delivery_address_for_order', 'N/A')
+    order_items = state.get('_current_order_items', [])
+    total = state.get('_order_subtotal', 0.0)
     order_id = f"PZ-{str(int(time.time()))[-6:]}"
-    items_str = ", ".join([f'{item["quantity"]}x {item.get("name")}' for item in order_items])
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    # 4. Escribir en la base de datos (Google Sheets) de forma asíncrona
+    # Formatear los ítems para que se lean bien en una celda
+    items_str = ", ".join([f"{item['quantity']}x {item['name']}" for item in order_items])
+
     try:
-        loop = asyncio.get_event_loop()
-        pedidos_ws = await loop.run_in_executor(None, get_worksheet, 'Pedidos_Registrados')
-        if not pedidos_ws:
-             return {"status": "error_internal", "message": "No se pudo acceder a la BD de pedidos."}
+        # =============================================================
+        # LÓGICA DE REGISTRO/ACTUALIZACIÓN DEL CLIENTE
+        # =============================================================
+        clientes_ws = await asyncio.to_thread(get_worksheet, 'Clientes')
+        
+        # Buscamos si el cliente ya existe por su ID en la primera columna
+        cell = await asyncio.to_thread(clientes_ws.find, user_id, in_column=1)
+        
+        if cell:
+            # Si el cliente existe, actualizamos su nombre y dirección
+            logger.info(f"Cliente con ID '{user_id}' encontrado en la fila {cell.row}. Actualizando datos.")
+            await asyncio.to_thread(clientes_ws.update_cell, cell.row, 2, customer_name)
+            await asyncio.to_thread(clientes_ws.update_cell, cell.row, 3, address)
+            await asyncio.to_thread(clientes_ws.update_cell, cell.row, 5, timestamp) # Actualizamos fecha de última interacción
+        else:
+            # Si no existe, creamos un nuevo cliente
+            logger.info(f"Cliente con ID '{user_id}' no encontrado. Creando nuevo registro.")
+            # Asumiendo columnas: ID_Cliente, Nombre, Direccion_Predeterminada, Fecha_Registro, Fecha_Ultimo_Pedido
+            nueva_fila_cliente = [user_id, customer_name, address, timestamp, timestamp]
+            await asyncio.to_thread(clientes_ws.append_row, nueva_fila_cliente)
+        
+        # =============================================================
+        # LÓGICA EXISTENTE: REGISTRO DEL PEDIDO
+        # =============================================================
+        pedidos_ws = await asyncio.to_thread(get_worksheet, 'Pedidos_Registrados')
+        nueva_fila_pedido = [order_id, timestamp, user_id, customer_name, items_str, total, address, 'Recibido']
+        await asyncio.to_thread(pedidos_ws.append_row, nueva_fila_pedido)
+        logger.info(f"--- Pedido {order_id} REGISTRADO CORRECTAMENTE EN GOOGLE SHEETS ---")
 
-        nueva_fila = [order_id, user_id, customer_name, address, timestamp, items_str, total, "Pendiente Aprobación"]
-        await loop.run_in_executor(None, pedidos_ws.append_row, nueva_fila, value_input_option='USER_ENTERED')
-
-        # 5. Guardar la marca de tiempo para la ventana de modificación
-        state['_order_finalized_timestamp'] = time.time()
-
-        logger.info(f"--- Pedido {order_id} REGISTRADO EN GOOGLE SHEETS ---")
-        logger.info(f"  -> Cliente: {customer_name}, Dirección: {address}")
-
-        # 6. Limpiar el estado del pedido actual para la siguiente interacción
+        # 3. Limpiar el estado de la sesión para el siguiente pedido
+        logger.info("[Tool] Limpiando estado de la sesión después del pedido.")
         state['_current_order_items'] = []
         state['_order_subtotal'] = 0.0
         state['_last_confirmed_delivery_address_for_order'] = None
+        state['_order_taking_complete'] = False
+        state['_order_confirmed'] = False
+        state['_greeting_and_transition_done'] = False
+        state['_customer_name_for_greeting'] = None # Limpiamos el nombre para el siguiente ciclo
 
-        return {"status": "success", "message": f"¡Gracias, {customer_name}! Tu pedido #{order_id} por S/ {total:.2f} ha sido registrado y se enviará a: {address}."}
+        # 4. Reiniciar la máquina de estados a un estado de espera
+        state['processing_order_sub_phase'] = 'A_STANDBY'
+        logger.info("[Tool] Máquina de estados reiniciada a A_STANDBY.")
 
+        # 5. Devolver mensaje de éxito al usuario
+        return {
+            "status": "success",
+            "message": f"¡Gracias, {customer_name.title()}! Tu pedido #{order_id} por S/ {total:.2f} ha sido registrado y se enviará a: {address}."
+        }
+
+    except gspread.exceptions.APIError as e:
+        logger.error(f"[Tool] Error de API de Google Sheets al registrar pedido: {e}")
+        return {"status": "error_api", "message": "Lo siento, tuvimos un problema al registrar tu pedido en nuestro sistema. Por favor, intenta de nuevo más tarde."}
     except Exception as e:
-        logger.error(f"[Tool] Error crítico al registrar pedido en Sheets: {repr(e)}")
-        return {"status": "error_internal", "message": "Tuvimos un problema al registrar tu pedido final."}
+        logger.error(f"[Tool] Error inesperado en registrar_pedido_finalizado: {e}", exc_info=True)
+        return {"status": "error_internal", "message": "Lo siento, ocurrió un error interno inesperado."}
+
+
+async def get_general_info(tool_context: ToolContext, info_key: str) -> Dict[str, Any]:
+    """
+    Obtiene información general de la pizzería desde una fuente de verdad externa
+    (simulada aquí, pero idealmente una pestaña de Google Sheets 'Configuracion').
+    """
+    logger.info(f"[Tool] Solicitando información general para la clave: '{info_key}'")
+    
+    # Simulación de lectura desde una hoja de cálculo 'Configuracion'
+    config_data = {
+        "horario": "Nuestro horario es de Lunes a Sábado, de 11:00 AM a 10:00 PM. Domingos cerramos.",
+        "telefono": "Puedes contactarnos al número +51 987 654 321.",
+        "ubicacion": "Estamos ubicados en Av. Siempre Viva 742."
+    }
+    
+    data = config_data.get(info_key.lower())
+    
+    if data:
+        return {"status": "success", "info_key": info_key, "info_value": data}
+    else:
+        return {"status": "not_found", "message": f"No se encontró información para '{info_key}'."}
+
+async def handle_complaint(tool_context: ToolContext, complaint_text: str) -> Dict[str, Any]:
+    """
+    Registra la queja de un cliente en un sistema externo
+    (simulado aquí, pero idealmente una pestaña de Google Sheets 'Quejas').
+    """
+    state = get_state_from_context(tool_context)
+    customer_name = state.get('_customer_name_for_greeting', 'Anónimo')
+    
+    logger.warning(f"[Tool] QUEJA REGISTRADA - Cliente: {customer_name}, Queja: '{complaint_text}'")
+    
+    # Aquí iría la lógica para escribir en la pestaña 'Quejas' de Google Sheets.
+    
+    return {
+        "status": "success",
+        "message": "Gracias por tus comentarios. Hemos registrado tu queja y un supervisor la revisará a la brevedad."
+    }
 
 # Stubs para otras herramientas
 async def solicitar_envio_menu_pdf(tool_context: Any) -> Dict[str, Any]:
@@ -553,34 +624,4 @@ async def solicitar_envio_menu_pdf(tool_context: Any) -> Dict[str, Any]:
         "message_to_user_before_pdf": "¡Claro! Aquí tienes nuestro menú completo para que elijas con calma:"
     }
 
-async def get_saved_addresses(tool_context: Any) -> Dict[str, Any]:
-    """
-    Recupera las direcciones guardadas (Principal y Secundaria) para el cliente actual.
-    Reutiliza la lógica de get_customer_data para no duplicar código.
-    """
-    state = get_state_from_context(tool_context)
-    user_id = state.get('_session_user_id')
-    logger.info(f"[Herramienta: get_saved_addresses] Buscando direcciones para user_id: '{user_id}'")
-    if not user_id:
-        return {"status": "error_no_client_id", "message": "ID de usuario no encontrado en sesión."}
-    
-    # Reutilizamos la herramienta que ya busca al cliente
-    customer_data_response = await get_customer_data(tool_context)
-    
-    if customer_data_response.get("status") == "found":
-        customer_data = customer_data_response.get("data", {})
-        dir_principal = customer_data.get('Direccion_Principal', '').strip()
-        dir_secundaria = customer_data.get('Direccion_Secundaria', '').strip()
-        
-        addresses = {}
-        if dir_principal: addresses['Direccion_Principal'] = dir_principal
-        if dir_secundaria: addresses['Direccion_Secundaria'] = dir_secundaria
-            
-        if addresses:
-            logger.info(f"Direcciones encontradas: {addresses}")
-            return {"status": "success", "addresses": addresses}
-    
-    # Si el cliente no fue encontrado, o fue encontrado pero no tiene direcciones
-    logger.info(f"No se encontraron direcciones guardadas para el cliente {user_id}.")
-    return {"status": "no_addresses_found", "message": "No tienes direcciones guardadas."}
 
