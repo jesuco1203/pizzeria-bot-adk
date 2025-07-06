@@ -29,48 +29,42 @@ def get_state_from_context(context: Any) -> Dict[str, Any]:
 # ==============================================================================
 # EN pizzeria_tools.py
 
-async def get_initial_customer_context(tool_context: Any) -> Dict[str, Any]:
+async def get_initial_customer_context(tool_context: ToolContext) -> Dict[str, Any]:
     """
-    Herramienta maestra de lectura inicial. Obtiene datos del cliente y estado de pedidos,
-    y actualiza directamente el estado de la sesión para el orquestador.
+    [VERSIÓN DEFINITIVA]
+    Obtiene el contexto del cliente desde Google Sheets.
+    - Si el cliente existe, DEVUELVE sus datos para que el agente los use.
+    - Si no existe, lo informa.
+    - Siempre actualiza la bandera _customer_status en el estado.
     """
     state = get_state_from_context(tool_context)
     user_id = state.get('_session_user_id')
-    logger.info(f"[Tool] Obteniendo contexto inicial REAL desde Google Sheets para user_id: '{user_id}'")
+    logger.info(f"[Tool] Obteniendo contexto inicial para user_id: '{user_id}'")
 
     if not user_id:
-        # ... (manejo de error)
         return {"status": "error", "message": "No se pudo obtener el user_id."}
 
     try:
-        # ... (tu lógica existente para conectar a Sheets)
         customers_ws = await asyncio.to_thread(get_worksheet, 'Clientes')
-        orders_ws = await asyncio.to_thread(get_worksheet, 'Pedidos_Registrados')
         all_customers = await asyncio.to_thread(customers_ws.get_all_records)
-        all_orders = await asyncio.to_thread(orders_ws.get_all_records)
-
-        context_response = {}
         customer_row = next((row for row in all_customers if str(row.get('ID_Cliente')).strip() == str(user_id).strip()), None)
 
         if customer_row:
-            logger.info(f"Cliente '{user_id}' encontrado.")
-            context_response['customer_status'] = 'found'
-            context_response['customer_data'] = customer_row
+            logger.info(f"Cliente '{user_id}' encontrado. DEVOLVIENDO DATOS AL AGENTE.")
+            state['_customer_status'] = 'found'
+            # ¡CAMBIO CLAVE! DEVOLVEMOS LOS DATOS DEL CLIENTE EN EL RESULTADO.
+            return {
+                "status": "found",
+                "customer_data": customer_row,
+                "message": "Cliente existente encontrado."
+            }
         else:
             logger.info(f"Cliente '{user_id}' NO encontrado.")
-            context_response['customer_status'] = 'not_found'
-
-        # ... (tu lógica existente para buscar pedidos)
-
-        # <<< CAMBIO CRÍTICO: Actualizar el estado directamente >>>
-        state['_customer_status'] = context_response['customer_status']
-        if context_response.get('customer_data'):
-            state['_customer_data'] = context_response['customer_data']
-        
-        logger.info(f"Estado de la sesión actualizado por la herramienta con: _customer_status='{state['_customer_status']}'")
-        
-        return {"status": "success", "message": "Contexto verificado y estado actualizado."}
-
+            state['_customer_status'] = 'not_found'
+            return {
+                "status": "not_found",
+                "message": "Cliente no registrado."
+            }
     except Exception as e:
         logger.error(f"[Tool] Error crítico en get_initial_customer_context: {repr(e)}")
         return {"status": "error", "message": "Error interno al consultar la base de datos."}
@@ -260,88 +254,74 @@ async def draft_response_for_review(tool_context: Any, draft_message: str) -> Di
     
     return {"status": "success", "message": "Borrador guardado para revisión."}
 
-# pizzeria_tools.py (dentro de la función register_update_customer)
-
 async def register_update_customer(tool_context: ToolContext, datos_cliente: Dict[str, Any]) -> Dict[str, str]:
     """
-    [V3 - MÁS ROBUSTA]
-    Guarda el nombre del cliente y silencia al agente. Acepta múltiples alias para el nombre.
+    [SIMPLIFICADA] Guarda el nombre del cliente y cede el control usando la herramienta universal.
     """
     state = get_state_from_context(tool_context)
-    logger.info(f"[Tool] Guardando datos del cliente en memoria: {datos_cliente}")
+    logger.info(f"[Tool] Registrando datos del cliente: {datos_cliente}")
 
-    flat_data = {}
-    def flatten_dict(d, parent_key='', sep='_'):
-        for k, v in d.items():
-            new_key = parent_key + sep + k if parent_key else k
-            if isinstance(v, dict):
-                flatten_dict(v, new_key, sep=sep)
-            else:
-                flat_data[new_key.lower()] = v
-    flatten_dict(datos_cliente)
-
-    # >>>>>>>>>> INICIO DE LA CORRECCIÓN <<<<<<<<<<
-    # Añadimos 'nombre_cliente' a la lista de alias aceptados.
     name_aliases = ['nombre_completo', 'nombre', 'name', 'customer_name', 'cliente', 'nombre_cliente']
-    # >>>>>>>>>> FIN DE LA CORRECCIÓN <<<<<<<<<<
-    
-    customer_name = next((flat_data[alias] for alias in name_aliases if alias in flat_data), None)
+    customer_name = next((datos_cliente.get(alias) for alias in name_aliases if datos_cliente.get(alias)), None)
 
     if customer_name:
-        state['_customer_name_for_greeting'] = str(customer_name)
-        state['_customer_status'] = 'found'
-        logger.info(f"Nombre '{customer_name}' guardado en state. Estado del cliente actualizado a 'found'.")
-        
-        tool_context.actions.skip_summarization = True
-        logger.info("[Tool] skip_summarization activado. El agente guardará silencio.")
-        
-        return {"status": "success", "message": "Nombre del cliente guardado y agente silenciado."}
+        # Prepara los datos a actualizar y llama a la herramienta universal.
+        updates = {
+            '_customer_name_for_greeting': str(customer_name),
+            '_customer_status': 'found'
+        }
+        return await yield_control_silently(tool_context, state_updates=updates)
     else:
-        logger.error(f"Error en register_update_customer: el diccionario no contiene claves de nombre reconocibles. Recibido: {datos_cliente}")
+        logger.error(f"Error en register_update_customer: no se encontraron datos de nombre.")
         return {"status": "error", "message": "Datos de nombre no reconocidos."}
 
 async def save_delivery_address(tool_context: ToolContext, direccion: str) -> Dict[str, Any]:
     """
-    Guarda la dirección de entrega confirmada en el estado de la sesión
-    y levanta una bandera para que el orquestador la vea.
+    [SIMPLIFICADA] Guarda la dirección y cede el control usando la herramienta universal.
     """
-    state = get_state_from_context(tool_context)
-    logger.info(f"[Tool] Guardando dirección de entrega en el estado: '{direccion}'")
-
-    if not direccion or len(direccion) < 5: # Una validación simple en la herramienta
+    logger.info(f"[Tool] Guardando dirección de entrega: '{direccion}'")
+    if not direccion or len(direccion) < 5:
         return {"status": "error", "message": "La dirección proporcionada parece demasiado corta."}
 
-    # Guardamos la dirección en el estado
-    state['_last_confirmed_delivery_address_for_order'] = direccion
-    
-    # [IMPORTANTE] No levantamos la bandera aquí. Dejamos que el agente lo haga
-    # para tener un patrón consistente.
+    # Prepara los datos y llama a la herramienta universal.
+    return await yield_control_silently(
+        tool_context,
+        state_updates={'_last_confirmed_delivery_address_for_order': direccion}
+    )
 
-    # Silenciamos al agente para ceder el control al orquestador.
+async def yield_control_silently(tool_context: ToolContext, state_updates: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    [HERRAMIENTA UNIVERSAL DE TRANSICIÓN]
+    Actualiza el estado de la sesión con las banderas o datos proporcionados
+    y luego silencia al agente actual para ceder el control al orquestador.
+    Esta es la única herramienta que debe usarse para transiciones de fase silenciosas.
+
+    Args:
+        state_updates (Dict[str, Any]): Un diccionario con las claves y valores
+                                        para actualizar en el estado de la sesión.
+    """
+    state = get_state_from_context(tool_context)
+    logger.info(f"[Tool] Cediendo control silenciosamente. Actualizando estado con: {state_updates}")
+
+    # 1. Actualiza el estado con toda la información necesaria.
+    state.update(state_updates)
+
+    # 2. Silencia al agente.
     tool_context.actions.skip_summarization = True
-    
-    return {"status": "success", "message": "Dirección guardada exitosamente."}
+
+    return {"status": "success", "message": "Control cedido al orquestador."}
 
 async def finalize_order_taking(tool_context: ToolContext) -> Dict[str, Any]:
     """
-    Herramienta CRÍTICA. Se llama cuando el cliente termina de ordenar.
-    1. Pone la bandera '_order_taking_complete' para el Orquestador.
-    2. Le ordena al framework que NO le pida una respuesta al agente actual.
-    Esto permite una transición instantánea y silenciosa a la siguiente fase.
+    [SIMPLIFICADA] Finaliza la toma del pedido. Solo prepara los datos para la
+    herramienta universal de transición.
     """
-    state = get_state_from_context(tool_context)
-    logger.info("[Tool] Finalizando la toma del pedido y cediendo control silenciosamente.")
-
-    # 1. Levanta la bandera para que el orquestador la vea.
-    state['_order_taking_complete'] = True
-
-    # 2. [LA ORDEN DIRECTA] Le decimos al framework de ADK: "No resumas esto".
-    # Esto garantiza el silencio técnico del agente.
-    tool_context.actions.skip_summarization = True
-
-    return {"status": "success", "message": "Fase de toma de pedido finalizada. Control cedido."}
-
-# Reemplaza la función en pizzeria_tools.py
+    logger.info("[Tool] Preparando para finalizar la toma del pedido.")
+    # Simplemente llama a la herramienta universal con la bandera correcta.
+    return await yield_control_silently(
+        tool_context,
+        state_updates={'_order_taking_complete': True}
+    )
 
 async def manage_order_item(tool_context: Any, action: str, item_name: str, quantity: int = 1) -> Dict[str, Any]:
     """
