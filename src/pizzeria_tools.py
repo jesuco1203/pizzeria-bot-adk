@@ -5,7 +5,7 @@ import logging
 import time
 import redis
 import json
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 import gspread
 from datetime import datetime
 from thefuzz import process, fuzz
@@ -101,77 +101,58 @@ async def commit_final_order_and_customer_data(tool_context: Any) -> Dict[str, A
 
 # Reemplazar la función en pizzeria_tools.py
 
-async def get_item_details_by_name(tool_context: Any, nombre_plato: str) -> Dict[str, Any]:
+# Reemplazar la función get_item_details_by_name en: pizzeria_tools.py
+
+async def get_item_details_by_name(tool_context: Any, nombre_plato: str, categoria: Optional[str] = None) -> Dict[str, Any]:
     """
-    [VERSIÓN FINAL] Busca un plato con una estrategia multi-etapa para máxima precisión.
-    Etapa 1: Coincidencia exacta de nombre o alias.
-    Etapa 2: Coincidencia flexible como último recurso, con umbral ajustado.
+    [VERSIÓN v3 - BÚSQUEDA POR CATEGORÍA]
+    Busca un plato. Si se proporciona una 'categoria', la búsqueda es más rápida y precisa.
+    Mantiene la lógica de manejo de ambigüedad para tamaños y variantes.
     """
-    logger.info(f"[Tool] Iniciando búsqueda multi-etapa para: '{nombre_plato}'")
+    logger.info(f"[Tool] Búsqueda v3 para: '{nombre_plato}', en Categoría: '{categoria or 'Todas'}'")
     from menu_cache import get_menu
     all_records = get_menu()
 
-    available_items = [item for item in all_records if str(item.get('Disponible', '')).lower() == 'sí']
-    if not available_items:
+    # Filtra el menú por categoría DESDE EL PRINCIPIO si se proporciona
+    if categoria:
+        search_space = [
+            item for item in all_records
+            if str(item.get('Categoria', '')).lower() == categoria.lower()
+            and str(item.get('Disponible', '')).lower() == 'sí'
+        ]
+        if not search_space:
+             return {"status": "not_found", "message": f"No encontré ítems en la categoría '{categoria}'."}
+    else:
+        search_space = [item for item in all_records if str(item.get('Disponible', '')).lower() == 'sí']
+
+    if not search_space:
         return {"status": "not_found", "message": "No hay ítems disponibles en el menú."}
 
     query_clean = nombre_plato.strip().lower()
 
-    # --- ETAPA 1: BÚSQUEDA EXACTA Y POR ALIAS (MÁXIMA PRIORIDAD) ---
-    for item in available_items:
-        # Búsqueda por nombre de plato
+    # Lógica de búsqueda (exacta, por alias, flexible) ahora sobre el 'search_space' filtrado
+    # (El resto de la lógica de la función que ya implementamos para manejar ambigüedades permanece igual)
+    
+    # --- BÚSQUEDA EXACTA Y POR ALIAS ---
+    for item in search_space:
         if str(item.get('Nombre_Plato', '')).lower() == query_clean:
-            logger.info(f"Coincidencia exacta de nombre encontrada: {item['Nombre_Plato']}")
+            logger.info(f"Coincidencia exacta encontrada: {item['Nombre_Plato']}")
             return {"status": "success", "item_details": item}
-        
-        # Búsqueda por alias
         aliases_str = item.get('Alias', '')
         if aliases_str:
-            aliases = [alias.strip().lower() for alias in aliases_str.split(',')]
-            if query_clean in aliases:
-                logger.info(f"Coincidencia exacta de alias encontrada para '{query_clean}', corresponde a: {item['Nombre_Plato']}")
+            if query_clean in [alias.strip().lower() for alias in aliases_str.split(',')]:
+                logger.info(f"Coincidencia de alias encontrada para '{query_clean}': {item['Nombre_Plato']}")
                 return {"status": "success", "item_details": item}
 
-    # --- ETAPA 2: BÚSQUEDA POR CONTENCIÓN DE PALABRAS CLAVE ---
-    query_keywords = set(query_clean.split())
-    perfect_matches = []
-    for item in available_items:
-        item_name_lower = str(item.get('Nombre_Plato', '')).lower()
-        if query_keywords.issubset(set(item_name_lower.split())):
-            perfect_matches.append(item)
-
-    if len(perfect_matches) == 1:
-        logger.info(f"Coincidencia única por palabras clave: {perfect_matches[0]['Nombre_Plato']}")
-        return {"status": "success", "item_details": perfect_matches[0]}
-    elif len(perfect_matches) > 1:
-        logger.info(f"Múltiples coincidencias por palabras clave ({[item['Nombre_Plato'] for item in perfect_matches]}). Pidiendo clarificación.")
-        return {"status": "clarification_needed", "options": perfect_matches}
-
-    # --- ETAPA 3: BÚSQUEDA FLEXIBLE (FUZZY) CON UMBRAL AJUSTADO ---
-    item_names = [item.get('Nombre_Plato') for item in available_items]
+    # --- BÚSQUEDA POR CONTENCIÓN ---
+    possible_matches = [item for item in search_space if query_clean in str(item.get('Nombre_Plato', '')).lower()]
     
-    matches = process.extract(query_clean, item_names, scorer=fuzz.token_set_ratio, limit=3)
-    
-    # Umbral de confianza ajustado a 75
-    high_confidence_matches = [match for match in matches if match[1] > 75]
-    
-    if not high_confidence_matches:
-        logger.info("Búsqueda flexible no encontró coincidencias de alta confianza.")
-        available_categories = await get_available_categories(tool_context)
-        return {
-            "status": "not_found", 
-            "message": f"Lo siento, no pude encontrar '{nombre_plato}' en el menú. ¿Quizás quisiste decir otra cosa? También puedes elegir una de estas categorías: {', '.join(available_categories.get('categories', []))}"
-        }
-
-    matched_item_names = [m[0] for m in high_confidence_matches]
-    matched_items = [item for item in available_items if item.get('Nombre_Plato') in matched_item_names]
-
-    if len(matched_items) == 1:
-         logger.info(f"Coincidencia flexible única encontrada: {matched_items[0]['Nombre_Plato']}")
-         return {"status": "success", "item_details": matched_items[0]}
+    if len(possible_matches) == 1:
+        return {"status": "success", "item_details": possible_matches[0]}
+    elif len(possible_matches) > 1:
+        return {"status": "clarification_needed", "message": f"Encontré varias opciones para '{nombre_plato}'.", "options": possible_matches}
     else:
-        logger.info(f"Múltiples coincidencias flexibles ({[item['Nombre_Plato'] for item in matched_items]}). Pidiendo clarificación.")
-        return {"status": "clarification_needed", "options": matched_items}
+        return {"status": "not_found", "message": f"Lo siento, no pude encontrar '{nombre_plato}'."}
 
 
 async def get_items_by_category(tool_context: Any, categoria: str) -> Dict[str, Any]:

@@ -1,7 +1,7 @@
 {
   "PIZ001-G": {
     "Nombre_Plato": "Pizza de Jamón - Grande",
-    "Alias": "jamon grande, pizza de jamon grande, piza de jamon grande",
+    "Alias": "pizza jamon, piza de jamon",
     "Descripcion_Plato": "Una de las más sencillas y preferidas de todos jamón y queso mozzarella.",
     "Categoria": "Pizzas",
     "Precio": 24,
@@ -107,7 +107,7 @@
   },
   "BEB001": {
     "Nombre_Plato": "Gaseosa Pepsi 500 ML",
-    "Alias": "pepsi personal, pepsi chica, gaseosa personal",
+    "Alias": "pepsi personal, pepsi chica, gaseosa personal,pepsi medio litro",
     "Descripcion_Plato": "Bebida gaseosa personal",
     "Categoria": "Bebidas",
     "Precio": 2.5,

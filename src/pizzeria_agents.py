@@ -32,7 +32,7 @@ from pizzeria_tools import (
     manage_order_item, view_current_order, save_delivery_address,
     registrar_pedido_finalizado, update_session_state, get_general_info, handle_complaint,
     calculate_order_total, get_items_by_category, get_item_details_by_name, draft_response_for_review,
-    register_update_customer, finalize_order_taking, get_available_categories
+    register_update_customer, finalize_order_taking, solicitar_envio_menu_pdf,get_available_categories
 )
 from menu_cache import load_menu_from_json
 import google.generativeai as genai
@@ -84,24 +84,39 @@ order_taking_agent = Agent(
     name="OrderTakingAgent",
     model=AGENT_GLOBAL_MODEL,
     instruction="""
-    ## Tu Rol: Asistente de Pedidos Amigable y Eficiente 🤖🍕
+## Tu Rol: Asistente de Ventas Experto y Proactivo 🤖🍕
 
-    **PROTOCOLO DE EJECUCIÓN ESTRICTO:**
+Tu misión es guiar al cliente a través del menú y tomar su pedido de la forma más eficiente y agradable posible, anticipando sus necesidades.
 
-    **1. PROCESAMIENTO DE ÍTEMS:**
-    - Cuando el cliente mencione un ítem, usa `manage_order_item` para añadirlo.
-    - Después de añadir un ítem, pregunta siempre: "¿Algo más?".
+**PROTOCOLO DE EJECUCIÓN INTELIGENTE:**
 
-    **2. FINALIZACIÓN DEL PEDIDO (REGLA DE ORO):**
-    - Si el cliente dice "eso es todo" o una frase similar, tu ÚNICA acción es llamar a la herramienta `finalize_order_taking`. No hagas nada más.
-    """,
+**1. DETECCIÓN DE CATEGORÍA (ACCIÓN PROACTIVA):**
+   - **SI** la solicitud del usuario es general y menciona una categoría (ej. "quiero una pizza", "ver las bebidas", "qué postres tienen"), tu **PRIMERA ACCIÓN** debe ser llamar a la herramienta `get_items_by_category`.
+   - Luego, presenta la lista de opciones al cliente de forma atractiva para que elija.
+   - **Ejemplo de respuesta:** "¡Claro! En nuestra sección de Pizzas tenemos: [lista de pizzas]. ¿Cuál te apetece hoy?"
+
+**2. PROCESAMIENTO DE ÍTEMS ESPECÍFICOS:**
+   - **SI** el cliente pide un ítem específico (ej. "quiero una pizza de jamón"), tu acción es usar la herramienta `manage_order_item` para añadirlo.
+
+**3. MANEJO DE AMBIGÜEDAD (ESCLARECIMIENTO):**
+   - **SI** una herramienta te devuelve `status: 'clarification_needed'`, es tu deber preguntar al cliente para que aclare su elección.
+   - **Ejemplo de respuesta:** "¡Perfecto! La Pizza Americana la tenemos en Grande y Familiar. ¿Cuál de las dos prefieres?"
+
+**4. MANEJO DE BÚSQUEDA FALLIDA (FALLBACK A PDF):**
+   - **SI** una herramienta de búsqueda devuelve `status: 'not_found'`, informa al usuario del problema y, como alternativa, **ofrece enviarle el menú completo**.
+   - Para ello, llama a la herramienta `solicitar_envio_menu_pdf`.
+   - **Ejemplo de respuesta:** "Lo siento, no pude encontrar 'piza de peperoni'. Si quieres, puedo enviarte nuestro menú completo en PDF para que veas todas las opciones."
+
+**5. FINALIZACIÓN DEL PEDIDO (REGLA DE ORO):**
+   - Si el cliente indica que ha terminado (ej. "eso es todo"), tu **ÚNICA** acción es llamar a la herramienta `finalize_order_taking`. No hagas nada más.
+""",
     tools=[
         manage_order_item,
         view_current_order,
         finalize_order_taking, # Esta es la herramienta refactorizada
         get_items_by_category,
         get_item_details_by_name,
-        get_available_categories
+        get_available_categories, solicitar_envio_menu_pdf
     ],
     before_model_callback=log_before_model_call, # <-- AÑADIR
     after_model_callback=log_after_model_call,   # <-- AÑADIR
@@ -247,7 +262,7 @@ class RootOrchestratorAgent(BaseAgent):
         super().__init__(**data)
         self._logger = logging.getLogger(self.name)
 
-# En pizzeria_agents.py, DENTRO de la clase RootOrchestratorAgent
+    # En pizzeria_agents.py, DENTRO de la clase RootOrchestratorAgent
 
     async def _run_async_impl(self, ctx: InvocationContext) -> AsyncGenerator[Event, None]:
         """
@@ -324,17 +339,31 @@ class RootOrchestratorAgent(BaseAgent):
                 transition_message = self._get_transition_message(state, current_phase, next_phase)
                 state_update_delta = {'processing_order_sub_phase': next_phase}
                 self._consume_transition_flags(state)
-                yield Event(
-                    author=self.name,
-                    actions=EventActions(state_delta=state_update_delta),
-                    content=genai_types.Content(parts=[genai_types.Part(text=transition_message)]) if transition_message else None
-                )
+
+                if transition_message:
+                    yield Event(
+                        author=self.name,
+                        actions=EventActions(state_delta=state_update_delta),
+                        content=genai_types.Content(parts=[genai_types.Part(text=transition_message)])
+                    )
+                else:
+                    # Si no hay mensaje, solo actualizamos el estado silenciosamente
+                    yield Event(
+                        author=self.name,
+                        actions=EventActions(state_delta=state_update_delta)
+                    )
+
                 current_phase = next_phase
+                    
     
     def _determine_next_phase(self, state: Dict[str, Any]) -> str:
-        """Determina la fase siguiente basándose en las banderas del estado."""
+        """
+        [VERSIÓN CORREGIDA]
+        Determina la fase siguiente basándose en las banderas del estado.
+        Su única responsabilidad es devolver el nombre de la fase.
+        """
         current_phase = state.get('processing_order_sub_phase')
-        
+
         if current_phase == 'A_GESTION_CLIENTE' and state.get('_customer_status') == 'found':
             return 'B_TOMA_ITEMS'
         if current_phase == 'B_TOMA_ITEMS' and state.get('_order_taking_complete'):
@@ -343,11 +372,16 @@ class RootOrchestratorAgent(BaseAgent):
             if state.get('_order_confirmed'):
                 return 'D_RECOGER_DIRECCION'
             if state.get('_modification_requested'):
-                return 'B_TOMA_ITEMS' # Vuelve a tomar el pedido
+                return 'B_TOMA_ITEMS'
         if current_phase == 'D_RECOGER_DIRECCION' and state.get('_last_confirmed_delivery_address_for_order'):
             return 'E_FINALIZAR_PEDIDO'
-            
-        return current_phase # Si no se cumple ninguna condición, la fase no cambia
+        
+        # Después de finalizar, se pasa a un estado de espera.
+        if current_phase == 'E_FINALIZAR_PEDIDO':
+            return 'A_STANDBY'
+
+        # Si no se cumple ninguna condición, la fase no cambia
+        return current_phase
 
     def _consume_transition_flags(self, state: Dict[str, Any]):
         """Limpia las banderas de transición después de usarlas para evitar bucles."""
@@ -356,18 +390,34 @@ class RootOrchestratorAgent(BaseAgent):
         state.pop('_modification_requested', None)
 
     def _get_transition_message(self, state: Dict[str, Any], from_phase: str, to_phase: str) -> Optional[str]:
-        """Genera un mensaje amigable para el usuario durante las transiciones de fase."""
+        """
+        [VERSIÓN CORREGIDA]
+        Genera un mensaje amigable para el usuario durante las transiciones de fase,
+        manejando de forma segura el caso en que el nombre del cliente no exista.
+        """
+        # Transición de A -> B (Después de registrar o identificar al cliente)
         if from_phase == 'A_GESTION_CLIENTE' and to_phase == 'B_TOMA_ITEMS':
-            customer_name = state.get('_customer_name_for_greeting', 'Cliente')
-            return f"¡Excelente, {customer_name.title()}! Ya estás registrado. Ahora, dime, ¿qué te gustaría pedir? 🍕"
+            # Usamos .get() para obtener el nombre de forma segura.
+            customer_name = state.get('_customer_name_for_greeting')
 
+            # Verificamos si tenemos un nombre antes de usarlo.
+            if customer_name:
+                # Si hay nombre, lo usamos en un saludo personalizado.
+                return f"¡Excelente, {customer_name.title()}! Ya estás registrado. Ahora, dime, ¿qué te gustaría pedir? 🍕"
+            else:
+                # Fallback por si algo falló y no tenemos nombre.
+                return "¿Qué te gustaría pedir? 🍕"
+
+        # Transición de B -> C (Después de tomar el pedido)
         if from_phase == 'B_TOMA_ITEMS' and to_phase == 'C_CONFIRMACION_PEDIDO':
             return "¡Perfecto! Déjame preparar el resumen de tu pedido para que lo revises."
-        
+
+        # Transición de C -> D (Después de confirmar el pedido)
         if from_phase == 'C_CONFIRMACION_PEDIDO' and to_phase == 'D_RECOGER_DIRECCION':
             return "¡Pedido confirmado! 👍 Para terminar, ¿a qué dirección lo enviamos?"
-            
-        return None # Otras transiciones pueden ser silenciosas
+
+        # Para todas las demás transiciones, no hay mensaje y la acción es silenciosa.
+        return None
                         
 
     def _determine_next_phase(self, state: Dict[str, Any]) -> str:
@@ -403,26 +453,6 @@ class RootOrchestratorAgent(BaseAgent):
         if phase == 'D_RECOGER_DIRECCION': return self.address_collection_agent
         if phase == 'E_FINALIZAR_PEDIDO': return self.finalization_agent
         return None
-
-    # Dentro de la clase RootOrchestratorAgent en pizzeria_agents.py
-
-    def _get_transition_message(self, state: Dict[str, Any], current_phase: str, next_phase: str) -> Optional[str]:
-        """Genera un mensaje amigable para el usuario durante las transiciones de fase."""
-        
-        # Transición de A -> B (Después de registrar el nombre)
-        if current_phase == 'A_GESTION_CLIENTE' and next_phase == 'B_TOMA_ITEMS':
-            customer_name = state.get('_customer_name_for_greeting', 'Cliente')
-            return f"¡Hola {customer_name.title()}, qué bueno verte! 😊 ¿Qué te gustaría ordenar hoy?"
-
-        # Transición de B -> C (Después de tomar el pedido)
-        if current_phase == 'B_TOMA_ITEMS' and next_phase == 'C_CONFIRMACION_PEDIDO':
-            return "¡Perfecto! Déjame preparar el resumen de tu pedido..."
-        
-        # Transición de C -> D (Después de confirmar el pedido)
-        if current_phase == 'C_CONFIRMACION_PEDIDO' and next_phase == 'D_RECOGER_DIRECCION':
-            return "¡Pedido confirmado! Para terminar, ¿a qué dirección lo enviamos?"
-            
-        return None # No hay mensaje para otras transiciones
 
 cma = customer_management_agent
 ota = order_taking_agent
